@@ -1,0 +1,66 @@
+package com.kodastream.app
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kodastream.app.data.AppEvents
+import com.kodastream.app.engine.AppBootstrap
+import com.kodastream.app.ui.AppRoot
+import com.kodastream.app.ui.theme.KodaStreamTheme
+import com.kodastream.app.ui.theme.ThemeMode
+import com.kodastream.app.ui.theme.ThemeViewModel
+import com.lagradost.cloudstream3.CommonActivity
+
+/**
+ * AppCompatActivity rather than ComponentActivity on purpose: extensions
+ * written for CloudStream sometimes cast the current activity to AppCompatActivity.
+ */
+class MainActivity : AppCompatActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        CommonActivity.setActivityInstance(this)
+        AppBootstrap.start(this)
+        handleIntent(intent)
+
+        setContent {
+            val themeViewModel: ThemeViewModel = viewModel()
+            val dark = when (themeViewModel.mode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            KodaStreamTheme(
+                darkTheme = dark,
+                colorPalette = themeViewModel.palette,
+                amoledDark = themeViewModel.amoled,
+                paletteStyle = themeViewModel.style,
+            ) {
+                AppRoot(themeViewModel)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        CommonActivity.setActivityInstance(this)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val link = intent?.data?.toString() ?: return
+        if (link.startsWith("cloudstreamrepo://")) {
+            AppEvents.pendingRepoUrl.value = link
+        }
+    }
+}

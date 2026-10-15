@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Parent is a Material Components theme (an AppCompat theme underneath), which
+        is what lets extension dialogs that expect an AppCompat activity work.
+        System bars are made transparent here, at window creation, because some OEM
+        skins ignore the runtime setters (same lesson as in Koda).
+    -->
+    <style name="Theme.KodaStream" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+</resources>

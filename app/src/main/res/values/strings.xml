@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KodaStream</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_extensions">Extensions</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Common -->
+    <string name="back">Back</string>
+    <string name="retry">Retry</string>
+    <string name="cancel">Cancel</string>
+    <string name="add">Add</string>
+    <string name="clear">Clear</string>
+    <string name="play">Play</string>
+    <string name="coming_soon">Coming soon</string>
+    <string name="nothing_found">Nothing found</string>
+    <string name="open_extensions">Open Extensions</string>
+
+    <!-- Home -->
+    <string name="home_empty_title">No extensions yet</string>
+    <string name="home_empty_hint">Add a repository in the Extensions tab and install a provider to see content here.</string>
+
+    <!-- Search -->
+    <string name="search_hint">Search every provider</string>
+    <string name="search_idle_title">Find something to watch</string>
+    <string name="search_idle_hint">Your search runs on all installed providers at once.</string>
+    <string name="search_no_results">No results</string>
+    <string name="search_no_results_hint">Try another spelling or install more providers.</string>
+
+    <!-- Details -->
+    <string name="episodes">Episodes</string>
+    <string name="recommended">You may also like</string>
+    <string name="dub">Dubbed</string>
+    <string name="sub">Subbed</string>
+    <string name="season_n">Season %1$d</string>
+    <string name="episode_n">Episode %1$d</string>
+    <string name="minutes_short">%1$d min</string>
+    <string name="type_not_supported">This kind of content (for example torrents) cannot be played in this version.</string>
+
+    <!-- Player -->
+    <string name="sources">Sources</string>
+    <string name="subtitles">Subtitles</string>
+    <string name="subtitles_off">Off</string>
+    <string name="still_searching">Still searching for more sources…</string>
+    <string name="no_sources">No playable sources were found.</string>
+    <string name="playback_failed">This source could not be played.</string>
+
+    <!-- Extensions -->
+    <string name="tab_installed">Installed (%1$d)</string>
+    <string name="tab_browse">Browse</string>
+    <string name="add_repository">Add repository</string>
+    <string name="add_repository_hint">Paste the address of a repository (repo.json), a cloudstreamrepo:// link or a short code.</string>
+    <string name="remove_repository">Remove repository</string>
+    <string name="filter_extensions">Filter extensions</string>
+    <string name="install">Install</string>
+    <string name="installed">Installed</string>
+    <string name="update">Update</string>
+    <string name="update_all">Update all</string>
+    <string name="uninstall">Uninstall</string>
+    <string name="plugin_down">Reported as down by the repository</string>
+    <string name="plugin_not_loaded">Could not be loaded</string>
+    <string name="no_extensions_title">Nothing installed</string>
+    <string name="no_extensions_hint">Extensions add the providers this app reads content from. Browse a repository to install some.</string>
+    <string name="no_repos_title">No repositories</string>
+    <string name="no_repos_hint">A repository is a list of extensions. Add the address of one to get started.</string>
+    <string name="repo_invalid">That does not look like a repository address.</string>
+    <string name="repo_unreadable">The repository could not be read.</string>
+    <string name="repo_added">Added %1$s</string>
+    <string name="repo_load_failed">The extension list could not be loaded.</string>
+    <string name="installed_ok">%1$s installed</string>
+    <string name="install_failed">Install failed: %1$s</string>
+    <string name="updated_n">%1$d extension(s) updated</string>
+    <string name="nothing_to_update">Everything is up to date</string>
+
+    <!-- Settings -->
+    <string name="settings_theme">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_amoled">Pure black</string>
+    <string name="settings_amoled_summary">True black backgrounds in the dark theme.</string>
+    <string name="settings_colors">Colors</string>
+    <string name="palette_wallpaper">Wallpaper</string>
+    <string name="settings_palette_style">Color style</string>
+    <string name="palette_style_tonal_spot">Tonal spot</string>
+    <string name="palette_style_vibrant">Vibrant</string>
+    <string name="palette_style_expressive">Expressive</string>
+    <string name="palette_style_fruit_salad">Fruit salad</string>
+    <string name="palette_style_monochrome">Monochrome</string>
+    <string name="settings_auto_update">Update extensions at startup</string>
+    <string name="settings_auto_update_summary">Checks your repositories each time the app starts.</string>
+    <string name="settings_about">About</string>
+    <string name="about_text">The look comes from the Koda interface. The extension engine comes from CloudStream and is licensed under the GNU GPL v3, so this app is open source under the same license.</string>
+    <string name="about_disclaimer">This app contains no content and no providers. It only loads extensions that you choose to install. You are responsible for what you watch.</string>
+</resources>

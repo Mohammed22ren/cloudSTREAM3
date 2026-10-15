@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KodaStream</string>
+
+    <!-- التنقل -->
+    <string name="nav_home">الرئيسية</string>
+    <string name="nav_search">البحث</string>
+    <string name="nav_extensions">الإضافات</string>
+    <string name="nav_settings">الإعدادات</string>
+
+    <!-- عام -->
+    <string name="back">رجوع</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="cancel">إلغاء</string>
+    <string name="add">إضافة</string>
+    <string name="clear">مسح</string>
+    <string name="play">تشغيل</string>
+    <string name="coming_soon">قريباً</string>
+    <string name="nothing_found">لا يوجد شيء</string>
+    <string name="open_extensions">فتح الإضافات</string>
+
+    <!-- الرئيسية -->
+    <string name="home_empty_title">لا توجد إضافات بعد</string>
+    <string name="home_empty_hint">أضف مستودعاً من تبويب الإضافات وثبّت مزوّداً ليظهر المحتوى هنا.</string>
+
+    <!-- البحث -->
+    <string name="search_hint">ابحث في كل المزوّدين</string>
+    <string name="search_idle_title">ابحث عمّا تريد مشاهدته</string>
+    <string name="search_idle_hint">يعمل البحث على جميع المزوّدين المثبّتين في وقت واحد.</string>
+    <string name="search_no_results">لا توجد نتائج</string>
+    <string name="search_no_results_hint">جرّب كتابة أخرى أو ثبّت مزوّدين إضافيين.</string>
+
+    <!-- التفاصيل -->
+    <string name="episodes">الحلقات</string>
+    <string name="recommended">قد يعجبك أيضاً</string>
+    <string name="dub">مدبلج</string>
+    <string name="sub">مترجم</string>
+    <string name="season_n">الموسم %1$d</string>
+    <string name="episode_n">الحلقة %1$d</string>
+    <string name="minutes_short">%1$d د</string>
+    <string name="type_not_supported">هذا النوع من المحتوى (مثل التورنت) لا يمكن تشغيله في هذا الإصدار.</string>
+
+    <!-- المشغّل -->
+    <string name="sources">المصادر</string>
+    <string name="subtitles">الترجمة</string>
+    <string name="subtitles_off">إيقاف</string>
+    <string name="still_searching">ما زال البحث عن مصادر أخرى جارياً…</string>
+    <string name="no_sources">لم يتم العثور على مصادر قابلة للتشغيل.</string>
+    <string name="playback_failed">تعذّر تشغيل هذا المصدر.</string>
+
+    <!-- الإضافات -->
+    <string name="tab_installed">المثبّتة (%1$d)</string>
+    <string name="tab_browse">استعراض</string>
+    <string name="add_repository">إضافة مستودع</string>
+    <string name="add_repository_hint">ألصق عنوان المستودع (repo.json) أو رابط cloudstreamrepo:// أو رمزاً مختصراً.</string>
+    <string name="remove_repository">حذف المستودع</string>
+    <string name="filter_extensions">تصفية الإضافات</string>
+    <string name="install">تثبيت</string>
+    <string name="installed">مثبّتة</string>
+    <string name="update">تحديث</string>
+    <string name="update_all">تحديث الكل</string>
+    <string name="uninstall">إزالة</string>
+    <string name="plugin_down">أبلغ المستودع أنها لا تعمل حالياً</string>
+    <string name="plugin_not_loaded">تعذّر تحميلها</string>
+    <string name="no_extensions_title">لا توجد إضافات مثبّتة</string>
+    <string name="no_extensions_hint">الإضافات هي التي تضيف المزوّدين الذين يقرأ منهم التطبيق. تصفّح مستودعاً لتثبيت بعضها.</string>
+    <string name="no_repos_title">لا توجد مستودعات</string>
+    <string name="no_repos_hint">المستودع هو قائمة بالإضافات. أضف عنوان مستودع للبدء.</string>
+    <string name="repo_invalid">لا يبدو هذا عنوان مستودع صالحاً.</string>
+    <string name="repo_unreadable">تعذّرت قراءة المستودع.</string>
+    <string name="repo_added">تمت إضافة %1$s</string>
+    <string name="repo_load_failed">تعذّر تحميل قائمة الإضافات.</string>
+    <string name="installed_ok">تم تثبيت %1$s</string>
+    <string name="install_failed">فشل التثبيت: %1$s</string>
+    <string name="updated_n">تم تحديث %1$d من الإضافات</string>
+    <string name="nothing_to_update">كل شيء محدّث</string>
+
+    <!-- الإعدادات -->
+    <string name="settings_theme">المظهر</string>
+    <string name="theme_system">النظام</string>
+    <string name="theme_light">فاتح</string>
+    <string name="theme_dark">داكن</string>
+    <string name="settings_amoled">أسود خالص</string>
+    <string name="settings_amoled_summary">خلفيات سوداء تماماً في المظهر الداكن.</string>
+    <string name="settings_colors">الألوان</string>
+    <string name="palette_wallpaper">ألوان الخلفية</string>
+    <string name="settings_palette_style">نمط الألوان</string>
+    <string name="palette_style_tonal_spot">نغمة هادئة</string>
+    <string name="palette_style_vibrant">نابض</string>
+    <string name="palette_style_expressive">تعبيري</string>
+    <string name="palette_style_fruit_salad">سلطة فواكه</string>
+    <string name="palette_style_monochrome">أحادي</string>
+    <string name="settings_auto_update">تحديث الإضافات عند التشغيل</string>
+    <string name="settings_auto_update_summary">يفحص مستودعاتك في كل مرة يبدأ فيها التطبيق.</string>
+    <string name="settings_about">حول التطبيق</string>
+    <string name="about_text">الشكل مأخوذ من واجهة كودا، ومحرك الإضافات مأخوذ من كلاودستريم وهو مرخّص بموجب GNU GPL v3، لذلك هذا التطبيق مفتوح المصدر بالترخيص نفسه.</string>
+    <string name="about_disclaimer">لا يحتوي هذا التطبيق على أي محتوى ولا أي مزوّد. هو يحمّل فقط الإضافات التي تختار تثبيتها، وأنت المسؤول عمّا تشاهده.</string>
+</resources>
