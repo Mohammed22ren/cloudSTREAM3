@@ -312,6 +312,9 @@ private fun AppNavGraph(
             LibraryScreen(
                 contentPadding = contentPadding,
                 onOpenItem = navController::openDetails,
+                onResume = { playerArgs ->
+                    navController.navigate("player/${NavArgs.put(playerArgs)}")
+                },
             )
         }
         composable(Routes.HISTORY) {

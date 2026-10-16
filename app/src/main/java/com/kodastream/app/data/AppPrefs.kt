@@ -14,6 +14,10 @@ object AppPrefs {
     private const val KEY_NAV_POSITION = "nav_position"
     private const val KEY_SPEED = "playback_speed"
     private const val KEY_PAUSE_HISTORY = "pause_history"
+    private const val KEY_DL_TREE = "download_tree_uri"
+    private const val KEY_DL_WIFI = "download_wifi_only"
+    private const val KEY_DL_MAX = "download_max_concurrent"
+    private const val KEY_DL_QUALITY = "download_last_quality"
     private const val POSITION_PREFIX = "pos_"
 
     const val NAV_SIDE = "side"
@@ -47,6 +51,34 @@ object AppPrefs {
 
     fun setPauseHistory(context: Context, value: Boolean) {
         prefs(context).edit { putBoolean(KEY_PAUSE_HISTORY, value) }
+    }
+
+    // ---- Downloads ----
+
+    /** The SAF tree the user picked, or null for the app's default folder. */
+    fun downloadTreeUri(context: Context): String? = prefs(context).getString(KEY_DL_TREE, null)
+
+    fun setDownloadTreeUri(context: Context, uri: String?) {
+        prefs(context).edit { if (uri == null) remove(KEY_DL_TREE) else putString(KEY_DL_TREE, uri) }
+    }
+
+    fun downloadWifiOnly(context: Context): Boolean = prefs(context).getBoolean(KEY_DL_WIFI, false)
+
+    fun setDownloadWifiOnly(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(KEY_DL_WIFI, value) }
+    }
+
+    fun downloadMaxConcurrent(context: Context): Int = prefs(context).getInt(KEY_DL_MAX, 2).coerceIn(1, 3)
+
+    fun setDownloadMaxConcurrent(context: Context, value: Int) {
+        prefs(context).edit { putInt(KEY_DL_MAX, value.coerceIn(1, 3)) }
+    }
+
+    /** The quality last picked in the download sheet, preselected next time. */
+    fun lastDownloadQuality(context: Context): Int = prefs(context).getInt(KEY_DL_QUALITY, -1)
+
+    fun setLastDownloadQuality(context: Context, value: Int) {
+        prefs(context).edit { putInt(KEY_DL_QUALITY, value) }
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

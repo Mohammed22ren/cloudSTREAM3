@@ -82,6 +82,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -145,8 +146,27 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
     private var job: Job? = null
 
     init {
-        resolve()
+        if (isLocalFile) {
+            // Offline playback: the data string is the file itself, there is
+            // nothing to resolve and no network request is ever made.
+            _resolving.value = false
+            _selectedLink.value = ExtractorLink(
+                source = "local",
+                name = "Local",
+                url = args.data,
+                referer = "",
+                quality = Qualities.Unknown,
+                headers = emptyMap(),
+                type = ExtractorLinkType.VIDEO,
+            )
+        } else {
+            resolve()
+        }
     }
+
+    /** True when args.data points at a downloaded file rather than a provider page. */
+    private val isLocalFile: Boolean =
+        args.data.startsWith("content://") || args.data.startsWith("file://")
 
     fun resolve() {
         job?.cancel()
@@ -220,7 +240,33 @@ private fun subtitleMimeType(url: String): String {
     }
 }
 
-private fun buildMediaSource(link: ExtractorLink, api: MainAPI?, subtitle: SubtitleFile?): MediaSource {
+private fun buildMediaSource(
+    link: ExtractorLink,
+    api: MainAPI?,
+    subtitle: SubtitleFile?,
+    context: android.content.Context,
+): MediaSource {
+    if (link.url.startsWith("content://") || link.url.startsWith("file://")) {
+        val item = MediaItem.Builder()
+            .setUri(android.net.Uri.parse(link.url))
+            .apply {
+                if (subtitle != null) {
+                    setSubtitleConfigurations(
+                        listOf(
+                            MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subtitle.url))
+                                .setMimeType(subtitleMimeType(subtitle.url))
+                                .setLanguage(subtitle.langTag ?: subtitle.lang)
+                                .setLabel(subtitle.lang)
+                                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                                .build()
+                        )
+                    )
+                }
+            }
+            .build()
+        return DefaultMediaSourceFactory(DefaultDataSource.Factory(context)).createMediaSource(item)
+    }
+
     val client = app.baseClient.newBuilder().apply {
         // Some providers need to sign or rewrite every request the player makes.
         api?.getVideoInterceptor(link)?.let { addInterceptor(it) }
@@ -418,7 +464,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         } else {
             AppPrefs.position(context, resumeKey).takeIf { it > 5_000L } ?: 0L
         }
-        exoPlayer.setMediaSource(buildMediaSource(link, viewModel.api, selectedSubtitle))
+        exoPlayer.setMediaSource(buildMediaSource(link, viewModel.api, selectedSubtitle, context))
         exoPlayer.prepare()
         if (position > 0L) exoPlayer.seekTo(position)
         exoPlayer.playWhenReady = true

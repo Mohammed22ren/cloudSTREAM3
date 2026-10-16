@@ -119,6 +119,7 @@ dependencies {
 
     // ---- Koda's UI stack: Compose + Material 3 Expressive ----
     implementation(libs.ax.core.ktx)
+    implementation(libs.ax.documentfile) // SAF DocumentFile for the download location
     implementation(libs.appcompat) // MainActivity is an AppCompatActivity, like CloudStream's
     implementation(libs.ax.lifecycle.runtime.ktx)
     implementation(libs.ax.lifecycle.viewmodel.compose)

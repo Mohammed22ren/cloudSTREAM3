@@ -174,6 +174,7 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" 
 
 # ---- KodaStream app UI stack ----
 ax-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "axCoreKtx" }
+ax-documentfile = { group = "androidx.documentfile", name = "documentfile", version = "1.0.1" }
 ax-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "axActivityCompose" }
 ax-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "axLifecycle" }
 ax-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "axLifecycleViewModelCompose" }

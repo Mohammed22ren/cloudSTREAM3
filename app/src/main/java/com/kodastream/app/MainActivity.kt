@@ -8,6 +8,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodastream.app.data.AppEvents
+import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.downloads.DownloadService
 import com.kodastream.app.engine.AppBootstrap
 import com.kodastream.app.ui.AppRoot
 import com.kodastream.app.ui.theme.KodaStreamTheme
@@ -27,6 +29,14 @@ class MainActivity : AppCompatActivity() {
         CommonActivity.setActivityInstance(this)
         AppBootstrap.start(this)
         handleIntent(intent)
+
+        // Interrupted and queued downloads resume where they left off.
+        if (DownloadStore.current(this).any {
+                it.state == DownloadStore.STATE_QUEUED || it.state == DownloadStore.STATE_DOWNLOADING
+            }
+        ) {
+            DownloadService.ensure(this)
+        }
 
         setContent {
             val themeViewModel: ThemeViewModel = viewModel()

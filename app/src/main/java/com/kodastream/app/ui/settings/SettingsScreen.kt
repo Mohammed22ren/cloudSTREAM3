@@ -1,5 +1,7 @@
 package com.kodastream.app.ui.settings
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +26,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +43,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kodastream.app.BuildConfig
 import com.kodastream.app.R
+import androidx.documentfile.provider.DocumentFile
 import com.kodastream.app.data.AppPrefs
+import com.kodastream.app.data.DownloadLocations
 import com.kodastream.app.ui.theme.APP_PALETTES
 import com.kodastream.app.ui.theme.DYNAMIC_PALETTE_ID
 import com.kodastream.app.ui.theme.PALETTE_CATEGORIES
@@ -56,6 +62,26 @@ fun SettingsScreen(
     var autoUpdate by remember { mutableStateOf(AppPrefs.autoUpdate(context)) }
     var navPosition by remember { mutableStateOf(AppPrefs.navPosition(context)) }
     var pauseHistory by remember { mutableStateOf(AppPrefs.pauseHistory(context)) }
+    var downloadWifiOnly by remember { mutableStateOf(AppPrefs.downloadWifiOnly(context)) }
+    var downloadConcurrent by remember { mutableStateOf(AppPrefs.downloadMaxConcurrent(context)) }
+    var downloadLocation by remember { mutableStateOf(DownloadLocations.readableLocation(context)) }
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (_: SecurityException) {
+            }
+            if (DocumentFile.fromTreeUri(context, uri)?.canWrite() == true) {
+                AppPrefs.setDownloadTreeUri(context, uri.toString())
+                downloadLocation = DownloadLocations.readableLocation(context)
+            } else {
+                Toast.makeText(context, R.string.download_folder_invalid, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -142,6 +168,73 @@ fun SettingsScreen(
                     pauseHistory = value
                 },
             )
+        }
+
+        // ---------------------------------------------------------------- downloads
+        item { GroupTitle(stringResource(R.string.settings_downloads)) }
+        item {
+            Column(Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.download_location),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+                Text(
+                    text = downloadLocation,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(start = 8.dp),
+                ) {
+                    TextButton(onClick = { pickFolder.launch(null) }) {
+                        Text(stringResource(R.string.download_location_change))
+                    }
+                    TextButton(
+                        onClick = {
+                            AppPrefs.setDownloadTreeUri(context, null)
+                            downloadLocation = DownloadLocations.readableLocation(context)
+                        },
+                    ) {
+                        Text(stringResource(R.string.download_location_reset))
+                    }
+                }
+            }
+        }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.download_wifi_only),
+                summary = stringResource(R.string.download_wifi_summary),
+                checked = downloadWifiOnly,
+                onCheckedChange = { value ->
+                    AppPrefs.setDownloadWifiOnly(context, value)
+                    downloadWifiOnly = value
+                },
+            )
+        }
+        item {
+            Text(
+                text = stringResource(R.string.download_max_concurrent),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(listOf(1, 2, 3)) { count ->
+                    FilterChip(
+                        selected = downloadConcurrent == count,
+                        onClick = {
+                            AppPrefs.setDownloadMaxConcurrent(context, count)
+                            downloadConcurrent = count
+                        },
+                        label = { Text(count.toString()) },
+                    )
+                }
+            }
         }
 
         item {

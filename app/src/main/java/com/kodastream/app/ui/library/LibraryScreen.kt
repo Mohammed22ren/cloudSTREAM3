@@ -37,6 +37,7 @@ import com.kodastream.app.R
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.LibraryStore
 import com.kodastream.app.data.LibraryStore.LibraryItem
+import com.kodastream.app.data.PlayerArgs
 import com.kodastream.app.ui.components.EmptyBox
 import com.kodastream.app.ui.components.PosterCard
 import com.kodastream.app.ui.components.SEARCH_FIELD_MIN_ITEMS
@@ -47,8 +48,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** The two shelves the library keeps. */
-enum class LibrarySection { FAVORITES, WATCHLIST }
+/** The shelves the library keeps. */
+enum class LibrarySection { FAVORITES, WATCHLIST, DOWNLOADS }
 
 class LibraryViewModel(application: Application) : AndroidViewModel(application) {
     private val _favorites = MutableStateFlow<List<LibraryItem>>(emptyList())
@@ -76,6 +77,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 fun LibraryScreen(
     contentPadding: PaddingValues,
     onOpenItem: (DetailsArgs) -> Unit,
+    onResume: (PlayerArgs) -> Unit,
 ) {
     val viewModel: LibraryViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val favorites by viewModel.favorites.collectAsState()
@@ -105,9 +107,16 @@ fun LibraryScreen(
                 SegmentedButton(
                     selected = section == LibrarySection.WATCHLIST,
                     onClick = { section = LibrarySection.WATCHLIST },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                 ) {
                     Text(stringResource(R.string.library_watchlist))
+                }
+                SegmentedButton(
+                    selected = section == LibrarySection.DOWNLOADS,
+                    onClick = { section = LibrarySection.DOWNLOADS },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                ) {
+                    Text(stringResource(R.string.nav_downloads))
                 }
             }
         }
@@ -123,6 +132,15 @@ fun LibraryScreen(
                 placeholder = stringResource(R.string.library_filter_hint),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
+        }
+
+        if (section == LibrarySection.DOWNLOADS) {
+            DownloadsSection(
+                contentPadding = contentPadding,
+                onOpenItem = onOpenItem,
+                onResume = onResume,
+            )
+            return
         }
 
         when {

@@ -1,5 +1,9 @@
 package com.kodastream.app.ui.details
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +36,9 @@ import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -49,12 +55,16 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -68,17 +78,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.text.HtmlCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
+import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DetailsArgs
+import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.data.DownloadStore.Download
 import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.HistoryStore.HistoryEntry
 import com.kodastream.app.data.LibraryStore
 import com.kodastream.app.data.LibraryStore.LibraryItem
 import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.data.PlayerArgs
+import com.kodastream.app.downloads.DownloadService
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
 import com.kodastream.app.ui.components.ErrorBox
@@ -96,8 +111,12 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -333,6 +352,95 @@ private fun DetailsContent(
         }
     }
 
+    // ---- downloads ----
+    var downloads by remember { mutableStateOf(DownloadStore.current(context)) }
+    LaunchedEffect(Unit) {
+        DownloadStore.entries.collect { updated -> updated?.let { downloads = it } }
+    }
+    val scope = rememberCoroutineScope()
+    var qualityLinks by remember { mutableStateOf<List<ExtractorLink>?>(null) }
+    var qualityPicked by remember { mutableStateOf<((ExtractorLink) -> Unit)?>(null) }
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    fun ensureNotifPermission() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    fun startDownload(link: ExtractorLink, season: Int?, episode: Int?, episodeTitle: String?) {
+        ensureNotifPermission()
+        if (link.quality != Qualities.Unknown) AppPrefs.setLastDownloadQuality(context, link.quality)
+        val isHls = link.type == ExtractorLinkType.M3U8
+        val sanitize: (String) -> String = { s: String ->
+            s.replace(Regex("[\\/:*?\"<>|]"), "").trim().take(100)
+        }
+        val fileName = if (season != null || episode != null) {
+            "${sanitize(title)} - S${"%02d".format(season ?: 1)}E${"%02d".format(episode ?: 1)}" +
+                (episodeTitle?.takeIf { it.isNotBlank() }?.let { " - ${sanitize(it)}" } ?: "") +
+                "." + (if (isHls) "ts" else "mp4")
+        } else {
+            sanitize(title) + (response.year?.let { " ($it)" } ?: "") + "." + (if (isHls) "ts" else "mp4")
+        }
+        val queued = DownloadStore.enqueue(
+            context,
+            Download(
+                id = DownloadStore.idOf(response.apiName, response.url, season, episode),
+                apiName = response.apiName,
+                url = response.url,
+                title = title,
+                posterUrl = response.posterUrl,
+                posterHeaders = response.posterHeaders,
+                type = when (response) {
+                    is AnimeLoadResponse -> "anime"
+                    is TvSeriesLoadResponse -> "series"
+                    else -> "movie"
+                },
+                season = season,
+                episode = episode,
+                episodeTitle = episodeTitle,
+                year = response.year,
+                linkUrl = link.url,
+                linkName = link.name,
+                quality = link.quality,
+                headers = link.getAllHeaders(),
+                streamType = if (isHls) "hls" else "direct",
+                fileName = fileName,
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+        if (queued) DownloadService.ensure(context)
+    }
+
+    fun requestDownload(data: String, season: Int?, episode: Int?, episodeTitle: String?) {
+        scope.launch {
+            val api = Engine.provider(response.apiName) ?: return@launch
+            val links = mutableListOf<ExtractorLink>()
+            Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
+                api.loadLinks(data, false, {}, { links.add(it) })
+            }
+            val usable = links
+                .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
+                .sortedByDescending { it.quality }
+            when {
+                usable.isEmpty() -> Toast.makeText(
+                    context, context.getString(R.string.download_no_sources), Toast.LENGTH_SHORT,
+                ).show()
+
+                usable.size == 1 -> startDownload(usable.first(), season, episode, episodeTitle)
+
+                else -> {
+                    qualityLinks = usable
+                    qualityPicked = { startDownload(it, season, episode, episodeTitle) }
+                }
+            }
+        }
+    }
+
+    fun downloadOf(id: String): Download? = downloads.firstOrNull { it.id == id }
+
     val title = response.name.ifBlank { fallbackTitle.orEmpty() }
     val plain = remember(response) {
         response.plot?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim() }
@@ -434,18 +542,24 @@ private fun DetailsContent(
                 LibraryToggles(response = response, isMovie = response !is TvSeriesLoadResponse && response !is AnimeLoadResponse)
 
                 if (directData != null) {
-                    Button(
-                        onClick = { play(directData, null) },
-                        enabled = !response.comingSoon && directData.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Rounded.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            stringResource(
-                                if (response.comingSoon) R.string.coming_soon else R.string.play
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { play(directData, null) },
+                            enabled = !response.comingSoon && directData.isNotBlank(),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Rounded.PlayArrow, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                stringResource(
+                                    if (response.comingSoon) R.string.coming_soon else R.string.play
+                                )
                             )
-                        )
+                        }
+                        val movieDownload = downloadOf(DownloadStore.idOf(response.apiName, response.url, null, null))
+                        DownloadStateIcon(download = movieDownload, onDownload = {
+                            requestDownload(directData, null, null, null)
+                        })
                     }
                 }
 
@@ -586,6 +700,40 @@ private fun DetailsContent(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.download_season)) },
+                                onClick = {
+                                    menuOpen = false
+                                    scope.launch {
+                                        val api = Engine.provider(response.apiName) ?: return@launch
+                                        var queuedCount = 0
+                                        for ((i, ep) in visibleEpisodes.withIndex()) {
+                                            val id = DownloadStore.idOf(
+                                                response.apiName, response.url,
+                                                ep.season ?: selectedSeason, ep.episode ?: i + 1,
+                                            )
+                                            if (downloads.any { it.id == id && it.state == DownloadStore.STATE_DONE }) continue
+                                            val links = mutableListOf<ExtractorLink>()
+                                            Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
+                                                api.loadLinks(ep.data, false, {}, { links.add(it) })
+                                            }
+                                            val best = links
+                                                .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
+                                                .maxByOrNull { it.quality }
+                                                ?: continue
+                                            startDownload(best, ep.season ?: selectedSeason, ep.episode ?: i + 1, ep.name)
+                                            queuedCount++
+                                        }
+                                        if (queuedCount > 0) {
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.download_queued_episodes, queuedCount),
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.hide_watched)) },
                                 leadingIcon = {
                                     if (hideWatched) {
@@ -608,11 +756,18 @@ private fun DetailsContent(
                 if (watched && hideWatched) return@itemsIndexed
                 // A composable call, so it is made here and not inside the click handler.
                 val label = episodeLabel(episode, index)
+                val episodeDownload = downloadOf(
+                    DownloadStore.idOf(
+                        response.apiName, response.url,
+                        episode.season ?: selectedSeason, episode.episode ?: index + 1,
+                    )
+                )
                 EpisodeRow(
                     episode = episode,
                     index = index,
                     posterHeaders = response.posterHeaders,
                     watched = watched,
+                    download = episodeDownload,
                     onClick = { play(episode.data, label, episode) },
                     onToggleWatched = {
                         WatchedStore.setWatched(
@@ -624,6 +779,22 @@ private fun DetailsContent(
                             resumeKey = response.apiName + "|" + episode.data,
                             watched = !watched,
                         )
+                    },
+                    onDownload = {
+                        when (episodeDownload?.state) {
+                            null -> requestDownload(
+                                episode.data,
+                                episode.season ?: selectedSeason,
+                                episode.episode ?: index + 1,
+                                episode.name,
+                            )
+
+                            DownloadStore.STATE_DOWNLOADING -> DownloadService.pause(context, episodeDownload.id)
+                            DownloadStore.STATE_PAUSED -> DownloadService.resume(context, episodeDownload.id)
+                            DownloadStore.STATE_FAILED -> DownloadService.retry(context, episodeDownload.id)
+                            DownloadStore.STATE_QUEUED -> DownloadService.cancel(context, episodeDownload.id)
+                            DownloadStore.STATE_DONE -> Unit
+                        }
                     },
                 )
             }
@@ -648,6 +819,100 @@ private fun DetailsContent(
 
         item(key = "bottom-space") { Spacer(Modifier.navigationBarsPadding()) }
     }
+
+    qualityLinks?.let { links ->
+        QualitySheet(
+            links = links,
+            onPick = { link ->
+                qualityPicked?.invoke(link)
+                qualityLinks = null
+                qualityPicked = null
+            },
+            onDismiss = {
+                qualityLinks = null
+                qualityPicked = null
+            },
+        )
+    }
+}
+
+/** The quality/server picker for downloads, preselecting the last chosen quality. */
+@Composable
+private fun QualitySheet(
+    links: List<ExtractorLink>,
+    onPick: (ExtractorLink) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val lastQuality = remember { AppPrefs.lastDownloadQuality(context) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+        ) {
+            Text(
+                text = stringResource(R.string.download_pick_quality),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+            )
+            links.forEach { link ->
+                val quality = Qualities.getStringByInt(link.quality)
+                val label = if (quality.isBlank()) link.name else "${link.name}  $quality"
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(link) }
+                        .padding(horizontal = 24.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = link.quality == lastQuality, onClick = null)
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+/**
+ * The download affordance: one icon that reads the download state and acts
+ * on tap - start, pause, resume, retry, cancel - with a 48dp target.
+ */
+@Composable
+private fun DownloadStateIcon(
+    download: Download?,
+    onDownload: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val (icon, tint, description) = when (download?.state) {
+        null -> Triple(Icons.Rounded.Download, MaterialTheme.colorScheme.onSurfaceVariant, R.string.cd_download)
+        DownloadStore.STATE_QUEUED -> Triple(Icons.Rounded.Schedule, MaterialTheme.colorScheme.onSurfaceVariant, R.string.download_queued)
+        DownloadStore.STATE_DOWNLOADING -> Triple(Icons.Rounded.Downloading, MaterialTheme.colorScheme.primary, R.string.cd_download_pause)
+        DownloadStore.STATE_PAUSED -> Triple(Icons.Rounded.PauseCircle, MaterialTheme.colorScheme.secondary, R.string.cd_download_resume)
+        DownloadStore.STATE_FAILED -> Triple(Icons.Rounded.ErrorOutline, MaterialTheme.colorScheme.error, R.string.cd_download_retry)
+        DownloadStore.STATE_DONE -> Triple(Icons.Rounded.DownloadDone, MaterialTheme.colorScheme.primary, R.string.downloaded)
+        else -> Triple(Icons.Rounded.Download, MaterialTheme.colorScheme.onSurfaceVariant, R.string.cd_download)
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = stringResource(description),
+        tint = tint,
+        modifier = modifier
+            .clip(CircleShape)
+            .clickable(onClick = onDownload)
+            .padding(12.dp)
+            .size(24.dp),
+    )
 }
 
 @Composable
@@ -692,9 +957,10 @@ private fun EpisodeRow(
     index: Int,
     posterHeaders: Map<String, String>?,
     watched: Boolean,
-    downloaded: Boolean = false,
+    download: Download? = null,
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
+    onDownload: () -> Unit = {},
 ) {
     val number = episode.episode ?: (index + 1)
     val title = episode.name?.takeIf { it.isNotBlank() } ?: stringResource(R.string.episode_n, number)
@@ -736,14 +1002,7 @@ private fun EpisodeRow(
                 )
             }
         }
-        if (downloaded) {
-            Icon(
-                imageVector = Icons.Rounded.DownloadDone,
-                contentDescription = stringResource(R.string.downloaded),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        DownloadStateIcon(download = download, onDownload = onDownload, modifier = Modifier)
         ToggleIconButton(
             filledIcon = Icons.Rounded.CheckCircle,
             outlinedIcon = Icons.Outlined.CheckCircle,
