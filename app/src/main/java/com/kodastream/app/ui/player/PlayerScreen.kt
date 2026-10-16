@@ -733,7 +733,7 @@ private fun SubtitleStyleSheet(onDismiss: () -> Unit) {
                             blurRadius = if (style.edgeType == CaptionStyleCompat.EDGE_TYPE_RAISED) 8f else 4f,
                         )
 
-                        else -> Shadow(Color.Transparent, 0f)
+                        else -> Shadow(Color.Transparent, Offset.Zero, 0f)
                     }
                     Text(
                         text = stringResource(R.string.subtitle_preview),
