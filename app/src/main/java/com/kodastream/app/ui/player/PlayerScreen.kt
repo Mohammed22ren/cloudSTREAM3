@@ -83,6 +83,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
@@ -291,12 +292,13 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     var showStyleSheet by remember { mutableStateOf(false) }
     var playbackFailed by remember { mutableStateOf(false) }
 
-    var resizeMode by remember { mutableStateOf(PlayerView.RESIZE_MODE_FIT) }
+    var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var speed by remember { mutableStateOf(AppPrefs.playbackSpeed(context)) }
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
-    val subtitleStyle by SubtitleStyleStore.style.collectAsState(
-        initial = remember { SubtitleStyleStore.current(context) }
-    )
+    var subtitleStyle by remember { mutableStateOf(SubtitleStyleStore.current(context)) }
+    LaunchedEffect(Unit) {
+        SubtitleStyleStore.style.collect { updated -> updated?.let { subtitleStyle = it } }
+    }
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
     val resumeKey = viewModel.args.resumeKey
@@ -394,7 +396,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = true
-                    resizeMode = PlayerView.RESIZE_MODE_FIT
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     controllerShowTimeoutMs = 3_000
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     setControllerVisibilityListener(
@@ -471,9 +473,9 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 }
                 IconButton(onClick = {
                     resizeMode = when (resizeMode) {
-                        PlayerView.RESIZE_MODE_FIT -> PlayerView.RESIZE_MODE_ZOOM
-                        PlayerView.RESIZE_MODE_ZOOM -> PlayerView.RESIZE_MODE_FILL
-                        else -> PlayerView.RESIZE_MODE_FIT
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                 }) {
                     Icon(
@@ -667,9 +669,10 @@ private fun ChoiceRow(selected: Boolean, label: String, onClick: () -> Unit) {
 @Composable
 private fun SubtitleStyleSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val style by SubtitleStyleStore.style.collectAsState(
-        initial = remember { SubtitleStyleStore.current(context) }
-    )
+    var style by remember { mutableStateOf(SubtitleStyleStore.current(context)) }
+    LaunchedEffect(Unit) {
+        SubtitleStyleStore.style.collect { updated -> updated?.let { style = it } }
+    }
     val fonts = remember(style) { SubtitleStyleStore.fonts(context) }
 
     val importFont = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
