@@ -43,10 +43,12 @@ object HistoryStore {
         val positionMs: Long = 0L,
         val durationMs: Long = 0L,
         val lastWatchedAt: Long = 0L,
+        /** Set by hand from "mark as watched"; progress alone derives it at 90%. */
+        val completed: Boolean = false,
     ) {
-        /** Watched 90% or more: kept in history, shown without a progress bar. */
-        val completed: Boolean
-            get() = durationMs > 0 && positionMs >= durationMs * 0.9
+        /** No progress bar is shown once the item is complete, however it became so. */
+        val isComplete: Boolean
+            get() = completed || (durationMs > 0 && positionMs >= durationMs * 0.9)
     }
 
     private const val STORE_KEY = "watch_history"
@@ -100,6 +102,22 @@ object HistoryStore {
 
     fun remove(context: Context, key: String) {
         publish(context, current(context).filter { it.key != key })
+    }
+
+    /** Marks a title completed (or clears the mark) without touching its position. */
+    fun setCompleted(context: Context, key: String, completed: Boolean) {
+        val next = current(context).map { entry ->
+            if (entry.key == key) entry.copy(completed = completed) else entry
+        }
+        publish(context, next)
+    }
+
+    /** Clears a title's saved progress, so unmarking starts it over. */
+    fun resetProgress(context: Context, key: String) {
+        val next = current(context).map { entry ->
+            if (entry.key == key) entry.copy(positionMs = 0) else entry
+        }
+        publish(context, next)
     }
 
     fun clear(context: Context) {

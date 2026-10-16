@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.History
@@ -61,6 +62,7 @@ import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.HistoryStore.HistoryEntry
 import com.kodastream.app.data.PlayerArgs
+import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.ui.components.EmptyBox
 import com.kodastream.app.ui.components.RemoteImage
@@ -88,6 +90,10 @@ fun HistoryScreen(
     var history by remember { mutableStateOf(HistoryStore.current(context)) }
     LaunchedEffect(Unit) {
         HistoryStore.entries.collect { updated -> updated?.let { history = it } }
+    }
+    var watchedKeys by remember { mutableStateOf(WatchedStore.current(context)) }
+    LaunchedEffect(Unit) {
+        WatchedStore.keys.collect { updated -> updated?.let { watchedKeys = it } }
     }
 
     val snackbar = remember { SnackbarHostState() }
@@ -138,6 +144,7 @@ fun HistoryScreen(
             } else {
                 HistoryGrid(
                     history = history,
+                    watchedKeys = watchedKeys,
                     contentPadding = contentPadding,
                     onOpenItem = onOpenItem,
                     onResume = onResume,
@@ -191,6 +198,7 @@ fun HistoryScreen(
 @Composable
 private fun HistoryGrid(
     history: List<HistoryEntry>,
+    watchedKeys: Set<String>,
     contentPadding: PaddingValues,
     onOpenItem: (DetailsArgs) -> Unit,
     onResume: (PlayerArgs) -> Unit,
@@ -233,6 +241,7 @@ private fun HistoryGrid(
             items(entries, key = { it.key }, span = { GridItemSpan(1) }) { entry ->
                 HistoryCard(
                     entry = entry,
+                    watched = WatchedStore.keyOf(entry.apiName, entry.url, entry.season, entry.episode) in watchedKeys,
                     onClick = {
                         if (Engine.provider(entry.apiName) == null) {
                             // The provider is gone: fall back to the details
@@ -276,6 +285,7 @@ private fun HistoryGrid(
 @Composable
 private fun HistoryCard(
     entry: HistoryEntry,
+    watched: Boolean,
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -348,7 +358,21 @@ private fun HistoryCard(
                     )
                 }
 
-                if (!entry.completed) {
+                if (watched) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = stringResource(R.string.cd_watched),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(6.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
+                            .padding(4.dp)
+                            .size(14.dp),
+                    )
+                }
+                if (!entry.isComplete) {
                     LinearProgressIndicator(
                         progress = {
                             if (entry.durationMs > 0) {

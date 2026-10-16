@@ -95,6 +95,7 @@ import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.PlayerArgs
+import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.data.SubtitleStyleStore
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
@@ -309,6 +310,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val resumeKey = viewModel.args.resumeKey
 
     var historyRecorded by remember { mutableStateOf(false) }
+    var watchedMarked by remember { mutableStateOf(false) }
 
     /**
      * Feeds the watch history: the first call past the 5-second mark creates
@@ -316,6 +318,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
      * calls only move the progress. Nothing is recorded while history is
      * paused or when the user peeked for under five seconds. Writes land on a
      * background dispatcher inside the store, never on the player's thread.
+     * Reaching 90% also marks the episode/movie watched.
      */
     fun recordHistory() {
         val entry = viewModel.args.history ?: return
@@ -328,6 +331,18 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             historyRecorded = true
         } else {
             HistoryStore.updateProgress(context, entry.key, position, duration)
+        }
+        if (!watchedMarked && duration > 0 && position >= duration * 0.9) {
+            WatchedStore.setWatched(
+                context = context,
+                apiName = entry.apiName,
+                url = entry.url,
+                season = entry.season,
+                episode = entry.episode,
+                resumeKey = entry.resumeKey,
+                watched = true,
+            )
+            watchedMarked = true
         }
     }
 

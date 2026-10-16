@@ -2,6 +2,7 @@ package com.kodastream.app.ui.details
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,10 +24,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.animation.AnimatedContent
@@ -36,6 +40,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -47,12 +53,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,9 +71,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
 import com.kodastream.app.data.DetailsArgs
+import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.HistoryStore.HistoryEntry
 import com.kodastream.app.data.LibraryStore
 import com.kodastream.app.data.LibraryStore.LibraryItem
+import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.data.PlayerArgs
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
@@ -184,9 +196,13 @@ private fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
  * point (this row, the library, another screen) always agrees.
  */
 @Composable
-private fun LibraryToggles(response: LoadResponse) {
+private fun LibraryToggles(response: LoadResponse, isMovie: Boolean) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val revision by LibraryStore.revision.collectAsState()
+    var watchedKeys by remember { mutableStateOf(WatchedStore.current(context)) }
+    LaunchedEffect(Unit) {
+        WatchedStore.keys.collect { updated -> updated?.let { watchedKeys = it } }
+    }
 
     val item = remember(response) {
         LibraryItem(
@@ -219,6 +235,28 @@ private fun LibraryToggles(response: LoadResponse) {
             label = stringResource(R.string.cd_add_watchlist),
             onToggle = { LibraryStore.toggleWatchlist(context, item) },
         )
+        // A movie is one unit, so its watched mark lives on the page itself;
+        // episodes carry theirs in the list below.
+        if (isMovie) {
+            val movieKey = WatchedStore.keyOf(response.apiName, response.url, null, null)
+            ToggleIconButton(
+                filledIcon = Icons.Rounded.CheckCircle,
+                outlinedIcon = Icons.Outlined.CheckCircle,
+                active = movieKey in watchedKeys,
+                label = stringResource(R.string.cd_mark_watched),
+                onToggle = {
+                    WatchedStore.setWatched(
+                        context = context,
+                        apiName = response.apiName,
+                        url = response.url,
+                        season = null,
+                        episode = null,
+                        resumeKey = null,
+                        watched = movieKey !in watchedKeys,
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -268,6 +306,29 @@ private fun DetailsContent(
         allEpisodes
     } else {
         allEpisodes.filter { it.season == selectedSeason || it.season == null }
+    }
+
+    // Watched episodes live in their own store, keyed per episode.
+    val context = LocalContext.current
+    var watchedKeys by remember { mutableStateOf(WatchedStore.current(context)) }
+    LaunchedEffect(Unit) {
+        WatchedStore.keys.collect { updated -> updated?.let { watchedKeys = it } }
+    }
+    var hideWatched by rememberSaveable { mutableStateOf(false) }
+
+    fun episodeKey(episode: Episode, index: Int): String =
+        WatchedStore.keyOf(response.apiName, response.url, episode.season ?: selectedSeason, episode.episode ?: index + 1)
+
+    /** Marks a batch of episodes and keeps the title's History entry in step. */
+    fun setWatchedBatch(episodes: List<Pair<Episode, Int>>, watched: Boolean) {
+        WatchedStore.setAll(context, episodes.map { (ep, i) -> episodeKey(ep, i) }, watched)
+        val historyKey = response.apiName + "|" + response.url
+        if (watched) {
+            HistoryStore.setCompleted(context, historyKey, true)
+        } else {
+            HistoryStore.setCompleted(context, historyKey, false)
+            HistoryStore.resetProgress(context, historyKey)
+        }
     }
 
     val title = response.name.ifBlank { fallbackTitle.orEmpty() }
@@ -335,6 +396,22 @@ private fun DetailsContent(
                         )
                 )
                 BackButton(onBack, Modifier.align(Alignment.TopStart))
+                val isMovie = response !is TvSeriesLoadResponse && response !is AnimeLoadResponse
+                if (isMovie && WatchedStore.keyOf(response.apiName, response.url, null, null) in watchedKeys) {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = stringResource(R.string.cd_watched),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(8.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
+                            .padding(6.dp)
+                            .size(20.dp),
+                    )
+                }
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall,
@@ -352,7 +429,7 @@ private fun DetailsContent(
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetaLine(response)
 
-                LibraryToggles(response = response)
+                LibraryToggles(response = response, isMovie = response !is TvSeriesLoadResponse && response !is AnimeLoadResponse)
 
                 if (directData != null) {
                     Button(
@@ -460,15 +537,92 @@ private fun DetailsContent(
         }
 
         if (visibleEpisodes.isNotEmpty()) {
-            item(key = "episodes-title") { SectionHeader(stringResource(R.string.episodes)) }
+            item(key = "episodes-title") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionHeader(stringResource(R.string.episodes), Modifier.weight(1f))
+                    Box {
+                        var menuOpen by remember { mutableStateOf(false) }
+                        IconButton(
+                            onClick = { menuOpen = true },
+                            modifier = Modifier.padding(end = 12.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.MoreVert,
+                                contentDescription = stringResource(R.string.episode_actions),
+                            )
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.mark_season_watched)) },
+                                onClick = {
+                                    setWatchedBatch(visibleEpisodes.mapIndexed { i, ep -> ep to i }, true)
+                                    menuOpen = false
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.mark_previous_watched)) },
+                                onClick = {
+                                    // Everything before the highest watched episode.
+                                    val maxWatched = visibleEpisodes.mapIndexedNotNull { i, ep ->
+                                        if (episodeKey(ep, i) in watchedKeys) (ep.episode ?: i + 1) else null
+                                    }.maxOrNull()
+                                    if (maxWatched != null) {
+                                        setWatchedBatch(
+                                            visibleEpisodes.mapIndexed { i, ep -> ep to i }
+                                                .filter { (ep, i) -> (ep.episode ?: i + 1) < maxWatched },
+                                            true,
+                                        )
+                                    }
+                                    menuOpen = false
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.mark_season_unwatched)) },
+                                onClick = {
+                                    setWatchedBatch(visibleEpisodes.mapIndexed { i, ep -> ep to i }, false)
+                                    menuOpen = false
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.hide_watched)) },
+                                leadingIcon = {
+                                    if (hideWatched) {
+                                        Icon(Icons.Rounded.CheckCircle, contentDescription = null)
+                                    }
+                                },
+                                onClick = {
+                                    hideWatched = !hideWatched
+                                    menuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
             itemsIndexed(visibleEpisodes) { index, episode ->
+                val watched = episodeKey(episode, index) in watchedKeys
+                // Hidden watched episodes keep their place in the index math,
+                // they just draw nothing while the toggle is on.
+                if (watched && hideWatched) return@itemsIndexed
                 // A composable call, so it is made here and not inside the click handler.
                 val label = episodeLabel(episode, index)
                 EpisodeRow(
                     episode = episode,
                     index = index,
                     posterHeaders = response.posterHeaders,
+                    watched = watched,
                     onClick = { play(episode.data, label, episode) },
+                    onToggleWatched = {
+                        WatchedStore.setWatched(
+                            context = context,
+                            apiName = response.apiName,
+                            url = response.url,
+                            season = episode.season ?: selectedSeason,
+                            episode = episode.episode ?: index + 1,
+                            resumeKey = response.apiName + "|" + episode.data,
+                            watched = !watched,
+                        )
+                    },
                 )
             }
         }
@@ -535,10 +689,15 @@ private fun EpisodeRow(
     episode: Episode,
     index: Int,
     posterHeaders: Map<String, String>?,
+    watched: Boolean,
+    downloaded: Boolean = false,
     onClick: () -> Unit,
+    onToggleWatched: () -> Unit,
 ) {
     val number = episode.episode ?: (index + 1)
     val title = episode.name?.takeIf { it.isNotBlank() } ?: stringResource(R.string.episode_n, number)
+    // Watched episodes dim out of the way; their check stays fully opaque.
+    val dim = if (watched) 0.45f else 1f
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -553,9 +712,10 @@ private fun EpisodeRow(
             modifier = Modifier
                 .width(120.dp)
                 .aspectRatio(16f / 9f)
-                .clip(MaterialTheme.shapes.small),
+                .clip(MaterialTheme.shapes.small)
+                .alpha(dim),
         )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f).alpha(dim), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = "$number. $title",
                 style = MaterialTheme.typography.bodyLarge,
@@ -574,6 +734,21 @@ private fun EpisodeRow(
                 )
             }
         }
+        if (downloaded) {
+            Icon(
+                imageVector = Icons.Rounded.DownloadDone,
+                contentDescription = stringResource(R.string.downloaded),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        ToggleIconButton(
+            filledIcon = Icons.Rounded.CheckCircle,
+            outlinedIcon = Icons.Outlined.CheckCircle,
+            active = watched,
+            label = stringResource(R.string.cd_mark_watched),
+            onToggle = onToggleWatched,
+        )
         Icon(
             imageVector = Icons.Rounded.PlayArrow,
             contentDescription = stringResource(R.string.play),

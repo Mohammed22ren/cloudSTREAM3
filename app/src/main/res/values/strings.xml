@@ -143,4 +143,12 @@
     <string name="history_clear_confirm_text">Every entry will be deleted. This cannot be undone.</string>
     <string name="settings_pause_history">Pause watch history</string>
     <string name="settings_pause_history_summary">When on, nothing you watch is recorded. Existing entries stay.</string>
+    <string name="cd_mark_watched">Mark as watched</string>
+    <string name="cd_watched">Watched</string>
+    <string name="mark_season_watched">Mark season as watched</string>
+    <string name="mark_previous_watched">Mark all previous episodes as watched</string>
+    <string name="mark_season_unwatched">Mark season as unwatched</string>
+    <string name="hide_watched">Hide watched episodes</string>
+    <string name="episode_actions">Episode actions</string>
+    <string name="downloaded">Downloaded</string>
 </resources>
