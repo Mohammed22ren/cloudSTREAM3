@@ -13,11 +13,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -25,8 +28,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Home
@@ -42,9 +48,12 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,7 +61,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -67,6 +79,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kodastream.app.R
 import com.kodastream.app.data.AppEvents
+import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.NavArgs
 import com.kodastream.app.ui.components.softSpring
@@ -144,98 +157,167 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
         if (pendingRepo != null) navController.navigateTopLevel(Routes.EXTENSIONS)
     }
 
-    // The pill floats over the content rather than reserving a Scaffold slot,
-    // so what the old Scaffold handed down as inner padding is assembled
-    // here: system-bar insets top and bottom, plus the pill's own strip.
+    val context = LocalContext.current
+    val navPosition by AppPrefs.navPosition.collectAsState(initial = AppPrefs.navPosition(context))
+    val sideMode = showBar && navPosition != AppPrefs.NAV_BOTTOM
+
+    // Either shell hands the screens the same contract: system-bar insets,
+    // plus the pill's strip only when the floating bar is actually there.
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val contentPadding = if (showBar) {
-        PaddingValues(top = topInset, bottom = 84.dp + navInset)
-    } else {
-        PaddingValues(0.dp)
+    val contentPadding = when {
+        !showBar -> PaddingValues(0.dp)
+        sideMode -> PaddingValues(top = topInset, bottom = navInset)
+        else -> PaddingValues(top = topInset, bottom = 84.dp + navInset)
     }
 
-    Box(Modifier.fillMaxSize()) {
-        NavHost(
-            navController = navController,
-            startDestination = Routes.HOME,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            composable(Routes.HOME) {
-                HomeScreen(
-                    contentPadding = contentPadding,
-                    onOpenItem = navController::openDetails,
-                    onOpenExtensions = { navController.navigateTopLevel(Routes.EXTENSIONS) },
-                )
-            }
-            composable(Routes.SEARCH) {
-                SearchScreen(
-                    contentPadding = contentPadding,
-                    onOpenItem = navController::openDetails,
-                )
-            }
-            composable(Routes.LIBRARY) {
-                LibraryScreen(
-                    contentPadding = contentPadding,
-                    onOpenItem = navController::openDetails,
-                )
-            }
-            composable(Routes.EXTENSIONS) {
-                ExtensionsScreen(contentPadding = contentPadding)
-            }
-            composable(Routes.SETTINGS) {
-                SettingsScreen(contentPadding = contentPadding, themeViewModel = themeViewModel)
-            }
-            composable(
-                route = Routes.DETAILS,
-                arguments = listOf(navArgument("id") { type = NavType.IntType }),
-            ) { entry ->
-                val args = NavArgs.details(entry.arguments?.getInt("id") ?: -1)
-                if (args == null) {
-                    // The process was recreated and the in-memory arguments are gone.
-                    LaunchedEffect(Unit) { navController.popBackStack() }
-                } else {
-                    val viewModel: DetailsViewModel = viewModel(
-                        factory = viewModelFactory { initializer { DetailsViewModel(args) } }
-                    )
-                    DetailsScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                        onOpenItem = navController::openDetails,
-                        onPlay = { playerArgs ->
-                            navController.navigate("player/${NavArgs.put(playerArgs)}")
-                        },
-                    )
-                }
-            }
-            composable(
-                route = Routes.PLAYER,
-                arguments = listOf(navArgument("id") { type = NavType.IntType }),
-            ) { entry ->
-                val args = NavArgs.player(entry.arguments?.getInt("id") ?: -1)
-                if (args == null) {
-                    LaunchedEffect(Unit) { navController.popBackStack() }
-                } else {
-                    val viewModel: PlayerViewModel = viewModel(
-                        factory = viewModelFactory { initializer { PlayerViewModel(args) } }
-                    )
-                    PlayerScreen(
-                        viewModel = viewModel,
-                        onBack = { navController.popBackStack() },
-                    )
+    // The app keeps its locale direction everywhere. The one exception is the
+    // shell row that pins the rail: in Arabic it must still put the rail on
+    // the left, so that row is LTR and the content slot gets the original
+    // direction re-provided inside it.
+    val contentDirection = LocalLayoutDirection.current
+
+    if (sideMode) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(Modifier.fillMaxSize()) {
+                SideNavRail(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
+                CompositionLocalProvider(LocalLayoutDirection provides contentDirection) {
+                    AppNavGraph(navController, themeViewModel, contentPadding)
                 }
             }
         }
+    } else {
+        Box(Modifier.fillMaxSize()) {
+            AppNavGraph(navController, themeViewModel, contentPadding)
+            AnimatedVisibility(
+                visible = showBar,
+                enter = fadeIn(tween(220)) +
+                    slideInVertically(animationSpec = softSpring()) { it * 2 },
+                exit = fadeOut(tween(180)) +
+                    slideOutVertically(animationSpec = softSpring()) { it * 2 },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                FloatingNavPill(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
+            }
+        }
+    }
+}
 
-        AnimatedVisibility(
-            visible = showBar,
-            enter = fadeIn(tween(220)) +
-                slideInVertically(animationSpec = softSpring()) { it * 2 },
-            exit = fadeOut(tween(180)) +
-                slideOutVertically(animationSpec = softSpring()) { it * 2 },
-            modifier = Modifier.align(Alignment.BottomCenter),
-        ) {
-            FloatingNavPill(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
+/** The routes themselves, shared verbatim by both navigation shells. */
+@Composable
+private fun AppNavGraph(
+    navController: NavHostController,
+    themeViewModel: ThemeViewModel,
+    contentPadding: PaddingValues,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.HOME,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        composable(Routes.HOME) {
+            HomeScreen(
+                contentPadding = contentPadding,
+                onOpenItem = navController::openDetails,
+                onOpenExtensions = { navController.navigateTopLevel(Routes.EXTENSIONS) },
+            )
+        }
+        composable(Routes.SEARCH) {
+            SearchScreen(
+                contentPadding = contentPadding,
+                onOpenItem = navController::openDetails,
+            )
+        }
+        composable(Routes.LIBRARY) {
+            LibraryScreen(
+                contentPadding = contentPadding,
+                onOpenItem = navController::openDetails,
+            )
+        }
+        composable(Routes.EXTENSIONS) {
+            ExtensionsScreen(contentPadding = contentPadding)
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(contentPadding = contentPadding, themeViewModel = themeViewModel)
+        }
+        composable(
+            route = Routes.DETAILS,
+            arguments = listOf(navArgument("id") { type = NavType.IntType }),
+        ) { entry ->
+            val args = NavArgs.details(entry.arguments?.getInt("id") ?: -1)
+            if (args == null) {
+                // The process was recreated and the in-memory arguments are gone.
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                val viewModel: DetailsViewModel = viewModel(
+                    factory = viewModelFactory { initializer { DetailsViewModel(args) } }
+                )
+                DetailsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenItem = navController::openDetails,
+                    onPlay = { playerArgs ->
+                        navController.navigate("player/${NavArgs.put(playerArgs)}")
+                    },
+                )
+            }
+        }
+        composable(
+            route = Routes.PLAYER,
+            arguments = listOf(navArgument("id") { type = NavType.IntType }),
+        ) { entry ->
+            val args = NavArgs.player(entry.arguments?.getInt("id") ?: -1)
+            if (args == null) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                val viewModel: PlayerViewModel = viewModel(
+                    factory = viewModelFactory { initializer { PlayerViewModel(args) } }
+                )
+                PlayerScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The side rail: same five destinations, same icons, same order as the pill,
+ * drawn vertically with the label under each icon. Scrollable so short
+ * screens in landscape do not clip the last item.
+ */
+@Composable
+private fun SideNavRail(selectedRoute: String?, onSelect: (String) -> Unit) {
+    NavigationRail(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier
+            .fillMaxHeight()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .displayCutoutPadding(),
+    ) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            topLevelDestinations.forEach { destination ->
+                val selected = selectedRoute == destination.route
+                NavigationRailItem(
+                    selected = selected,
+                    onClick = { onSelect(destination.route) },
+                    icon = {
+                        Icon(
+                            imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
+                            contentDescription = null,
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = stringResource(destination.labelRes),
+                            maxLines = 1,
+                        )
+                    },
+                    alwaysShowLabel = true,
+                )
+            }
         }
     }
 }

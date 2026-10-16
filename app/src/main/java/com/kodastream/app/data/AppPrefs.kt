@@ -2,13 +2,36 @@ package com.kodastream.app.data
 
 import android.content.Context
 import androidx.core.content.edit
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /** Small app settings that are not part of the theme. */
 object AppPrefs {
     private const val PREFS = "kodastream_prefs"
     private const val KEY_PROVIDER = "selected_provider"
     private const val KEY_AUTO_UPDATE = "auto_update_extensions"
+    private const val KEY_NAV_POSITION = "nav_position"
     private const val POSITION_PREFIX = "pos_"
+
+    const val NAV_SIDE = "side"
+    const val NAV_BOTTOM = "bottom"
+
+    private val _navPosition = MutableStateFlow<String?>(null)
+
+    /** The bar position, as a flow so the shell can switch layouts the moment it changes. */
+    val navPosition: StateFlow<String?> = _navPosition.asStateFlow()
+
+    /** Where the navigation bar sits. Side (left) is the default. */
+    fun navPosition(context: Context): String =
+        _navPosition.value
+            ?: prefs(context).getString(KEY_NAV_POSITION, null)?.also { _navPosition.value = it }
+            ?: NAV_SIDE
+
+    fun setNavPosition(context: Context, value: String) {
+        _navPosition.value = value
+        prefs(context).edit { putString(KEY_NAV_POSITION, value) }
+    }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

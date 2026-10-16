@@ -54,6 +54,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var autoUpdate by remember { mutableStateOf(AppPrefs.autoUpdate(context)) }
+    var navPosition by remember { mutableStateOf(AppPrefs.navPosition(context)) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -94,6 +95,36 @@ fun SettingsScreen(
                                 )
                             )
                         },
+                    )
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- navigation
+        item { GroupTitle(stringResource(R.string.settings_navigation)) }
+        item {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item {
+                    FilterChip(
+                        selected = navPosition == AppPrefs.NAV_SIDE,
+                        onClick = {
+                            AppPrefs.setNavPosition(context, AppPrefs.NAV_SIDE)
+                            navPosition = AppPrefs.NAV_SIDE
+                        },
+                        label = { Text(stringResource(R.string.nav_position_side)) },
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = navPosition == AppPrefs.NAV_BOTTOM,
+                        onClick = {
+                            AppPrefs.setNavPosition(context, AppPrefs.NAV_BOTTOM)
+                            navPosition = AppPrefs.NAV_BOTTOM
+                        },
+                        label = { Text(stringResource(R.string.nav_position_bottom)) },
                     )
                 }
             }

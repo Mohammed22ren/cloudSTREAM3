@@ -105,4 +105,7 @@
     <string name="library_filter_hint">تصفية مكتبتك</string>
     <string name="cd_add_favorites">حفظ في المفضلة</string>
     <string name="cd_add_watchlist">حفظ في قائمة المشاهدة</string>
+    <string name="settings_navigation">موضع شريط التنقل</string>
+    <string name="nav_position_side">الجانب (يسار)</string>
+    <string name="nav_position_bottom">الأسفل</string>
 </resources>

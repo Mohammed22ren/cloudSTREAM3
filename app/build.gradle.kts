@@ -103,6 +103,9 @@ dependencies {
     // classpath but NOT visible at compile time. This module (and the extensions
     // it loads) needs them, so they are repeated here, same as CloudStream's app.
     implementation(libs.nicehttp)
+    // CloudStream's TLS provider: some providers fail against Google/CDN
+    // endpoints without it. Pinned, same as the original app.
+    implementation(libs.conscrypt.android)
     implementation(libs.jsoup)
     implementation(libs.ksoup)
     implementation(libs.rhino)

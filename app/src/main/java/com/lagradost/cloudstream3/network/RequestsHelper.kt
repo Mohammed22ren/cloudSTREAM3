@@ -8,7 +8,9 @@ import okhttp3.Cache
 import okhttp3.Headers
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
+import org.conscrypt.Conscrypt
 import java.io.File
+import java.security.Security
 
 // Backwards compatible constructor, mark as deprecated later
 fun Requests.initClient(context: Context) {
@@ -27,6 +29,13 @@ fun buildDefaultClient(context: Context): OkHttpClient {
 
 /** Only use ignoreSSL if you know what you are doing*/
 fun buildDefaultClient(context: Context, ignoreSSL: Boolean = false): OkHttpClient {
+    // CloudStream inserts Conscrypt as the first TLS provider; extensions that
+    // make their own OkHttp calls (Firebase registrations, gateway APIs) depend
+    // on the same stack the original app ships.
+    try {
+        Security.insertProviderAt(Conscrypt.newProvider(), 1)
+    } catch (_: Throwable) {
+    }
     return OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
