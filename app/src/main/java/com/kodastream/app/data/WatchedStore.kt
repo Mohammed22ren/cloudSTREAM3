@@ -85,8 +85,7 @@ object WatchedStore {
         val entries = keys.map { WatchedEntry(key = it, watchedAt = now) }
         scope.launch { context.setKey(STORE_KEY, entries) }
     }
-
-    private companion object {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    }
 }
+
+/** Serialization stays off the main thread, the same as HistoryStore. */
+private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
