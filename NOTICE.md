@@ -13,9 +13,12 @@
 - Source: https://github.com/recloudstream/cloudstream
 - License: GNU General Public License v3.0 (`LICENSE`).
 
-## Koda (license not stated)
+## Koda (GPL-3.0)
 - `app/src/main/java/com/kodastream/app/ui/theme/` (`Color.kt`, `Type.kt`, `PaletteStyle.kt`,
   `ColorPalettes.kt`, `Theme.kt`) is adapted from the Koda app's theme package.
-- The copy of Koda that was supplied has no LICENSE file and no license text in its docs.
-  Until its author grants permission, treat these files as not cleared for redistribution.
+- `app/src/main/java/com/kodastream/app/ui/components/` reuses Koda's shared UI components
+  (`Skeleton.kt`, `ExpressivePullToRefresh.kt`, `SearchField.kt`, the card and badge patterns
+  in `Common.kt`, the motion presets in `Motion.kt`), adapted to KodaStream's data classes.
+- Source: https://github.com/Ivorisnoob/Koda
+- License: GNU General Public License v3.0 (the copy supplied carries the full text in `LICENSE`).
 - Koda's logo and name are not used.

@@ -2,6 +2,8 @@ package com.kodastream.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,27 +17,32 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material3.Surface
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.kodastream.app.R
 import com.lagradost.cloudstream3.SearchResponse
@@ -43,6 +50,8 @@ import com.lagradost.cloudstream3.SearchResponse
 /**
  * An image from a provider. Some sites only serve posters when the request
  * carries their own headers (referer, cookies), so those are forwarded.
+ * While it loads the placeholder breathes with the shared skeleton pulse;
+ * a missing poster falls back to a film icon on a tonal block.
  */
 @Composable
 fun RemoteImage(
@@ -52,15 +61,9 @@ fun RemoteImage(
     contentScale: ContentScale = ContentScale.Crop,
 ) {
     val context = LocalContext.current
-    val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    Box(modifier = modifier.background(placeholderColor), contentAlignment = Alignment.Center) {
+    Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
         if (url.isNullOrBlank()) {
-            Icon(
-                imageVector = Icons.Rounded.Movie,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(32.dp),
-            )
+            PosterPlaceholder()
         } else {
             val request = remember(url, headers) {
                 ImageRequest.Builder(context)
@@ -69,14 +72,27 @@ fun RemoteImage(
                     .crossfade(true)
                     .build()
             }
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = request,
                 contentDescription = null,
                 contentScale = contentScale,
+                loading = { SkeletonBox(modifier = Modifier.fillMaxSize(), alpha = rememberSkeletonAlpha()) },
+                error = { PosterPlaceholder() },
                 modifier = Modifier.fillMaxSize(),
             )
         }
     }
+}
+
+/** The tonal film icon shown when a poster is missing or fails to load. */
+@Composable
+private fun PosterPlaceholder() {
+    Icon(
+        imageVector = Icons.Rounded.Movie,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        modifier = Modifier.size(32.dp),
+    )
 }
 
 /** A poster with its title underneath, the basic unit of every list in the app. */
@@ -87,58 +103,98 @@ fun PosterCard(
     modifier: Modifier = Modifier,
     horizontal: Boolean = false,
 ) {
+    PosterCard(
+        name = item.name,
+        posterUrl = item.posterUrl,
+        posterHeaders = item.posterHeaders,
+        score10 = item.score?.toFloat(10),
+        onClick = onClick,
+        modifier = modifier,
+        horizontal = horizontal,
+    )
+}
+
+/** The card every list shares: a tonal surface, a breathing placeholder while
+ *  the poster loads, a scrim rating badge that stays readable on any image,
+ *  and a spring press that reads as physically pressing the card down. */
+@Composable
+fun PosterCard(
+    name: String,
+    posterUrl: String?,
+    posterHeaders: Map<String, String>?,
+    score10: Float?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    horizontal: Boolean = false,
+) {
     val cardWidth = if (horizontal) 220.dp else 128.dp
     val ratio = if (horizontal) 16f / 9f else 2f / 3f
-    Column(
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        animationSpec = bouncySpring(),
+        label = "cardPress",
+    )
+    Surface(
         modifier = modifier
             .width(cardWidth)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
     ) {
-        Box {
-            RemoteImage(
-                url = item.posterUrl,
-                headers = item.posterHeaders,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(ratio)
-                    .clip(MaterialTheme.shapes.medium),
-            )
-            val score = item.score?.toFloat(10)
-            if (score != null && score > 0f) {
-                Row(
+        Column {
+            Box {
+                RemoteImage(
+                    url = posterUrl,
+                    headers = posterHeaders,
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Star,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(12.dp),
-                    )
-                    Spacer(Modifier.width(2.dp))
-                    Text(
-                        text = "%.1f".format(score),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                        .fillMaxWidth()
+                        .aspectRatio(ratio),
+                )
+                // The badge sits on a photograph, so it takes its contrast
+                // from a scrim, never from the theme: a thumbnail is the same
+                // image in every palette and a theme-derived container is
+                // unreadable in one of the two modes.
+                if (score10 != null && score10 > 0f) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.8f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Star,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Spacer(Modifier.width(2.dp))
+                        Text(
+                            text = "%.1f".format(score10),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                        )
+                    }
                 }
             }
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            )
         }
-        Text(
-            text = item.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 2.dp),
-        )
     }
 }
 

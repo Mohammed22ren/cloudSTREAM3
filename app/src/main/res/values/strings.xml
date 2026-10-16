@@ -95,4 +95,5 @@
     <string name="settings_about">About</string>
     <string name="about_text">The look comes from the Koda interface. The extension engine comes from CloudStream and is licensed under the GNU GPL v3, so this app is open source under the same license.</string>
     <string name="about_disclaimer">This app contains no content and no providers. It only loads extensions that you choose to install. You are responsible for what you watch.</string>
+    <string name="cd_clear_search">Clear search</string>
 </resources>

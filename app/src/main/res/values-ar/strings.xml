@@ -95,4 +95,5 @@
     <string name="settings_about">حول التطبيق</string>
     <string name="about_text">الشكل مأخوذ من واجهة كودا، ومحرك الإضافات مأخوذ من كلاودستريم وهو مرخّص بموجب GNU GPL v3، لذلك هذا التطبيق مفتوح المصدر بالترخيص نفسه.</string>
     <string name="about_disclaimer">لا يحتوي هذا التطبيق على أي محتوى ولا أي مزوّد. هو يحمّل فقط الإضافات التي تختار تثبيتها، وأنت المسؤول عمّا تشاهده.</string>
+    <string name="cd_clear_search">مسح البحث</string>
 </resources>
