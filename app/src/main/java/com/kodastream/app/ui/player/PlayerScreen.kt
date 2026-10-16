@@ -145,6 +145,10 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
     private val failedUrls = HashSet<String>()
     private var job: Job? = null
 
+    /** True when args.data points at a downloaded file rather than a provider page. */
+    private val isLocalFile: Boolean =
+        args.data.startsWith("content://") || args.data.startsWith("file://")
+
     init {
         if (isLocalFile) {
             // Offline playback: the data string is the file itself, there is
@@ -155,7 +159,7 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
                 name = "Local",
                 url = args.data,
                 referer = "",
-                quality = Qualities.Unknown,
+                quality = Qualities.Unknown.value,
                 headers = emptyMap(),
                 type = ExtractorLinkType.VIDEO,
             )
@@ -164,9 +168,6 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
         }
     }
 
-    /** True when args.data points at a downloaded file rather than a provider page. */
-    private val isLocalFile: Boolean =
-        args.data.startsWith("content://") || args.data.startsWith("file://")
 
     fun resolve() {
         job?.cancel()

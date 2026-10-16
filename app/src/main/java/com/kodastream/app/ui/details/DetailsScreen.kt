@@ -31,6 +31,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Downloading
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Favorite
@@ -40,6 +43,8 @@ import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Star
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -352,6 +357,14 @@ private fun DetailsContent(
         }
     }
 
+
+    val title = response.name.ifBlank { fallbackTitle.orEmpty() }
+    val plain = remember(response) {
+        response.plot?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim() }
+    }
+    var plotExpanded by remember(response) { mutableStateOf(false) }
+    val directData = directDataOf(response)
+
     // ---- downloads ----
     var downloads by remember { mutableStateOf(DownloadStore.current(context)) }
     LaunchedEffect(Unit) {
@@ -372,7 +385,7 @@ private fun DetailsContent(
 
     fun startDownload(link: ExtractorLink, season: Int?, episode: Int?, episodeTitle: String?) {
         ensureNotifPermission()
-        if (link.quality != Qualities.Unknown) AppPrefs.setLastDownloadQuality(context, link.quality)
+        if (link.quality != Qualities.Unknown.value) AppPrefs.setLastDownloadQuality(context, link.quality)
         val isHls = link.type == ExtractorLinkType.M3U8
         val sanitize: (String) -> String = { s: String ->
             s.replace(Regex("[\\/:*?\"<>|]"), "").trim().take(100)
@@ -441,12 +454,6 @@ private fun DetailsContent(
 
     fun downloadOf(id: String): Download? = downloads.firstOrNull { it.id == id }
 
-    val title = response.name.ifBlank { fallbackTitle.orEmpty() }
-    val plain = remember(response) {
-        response.plot?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim() }
-    }
-    var plotExpanded by remember(response) { mutableStateOf(false) }
-    val directData = directDataOf(response)
 
     fun play(data: String, subtitle: String?, episode: Episode? = null) {
         val resumeKey = response.apiName + "|" + data

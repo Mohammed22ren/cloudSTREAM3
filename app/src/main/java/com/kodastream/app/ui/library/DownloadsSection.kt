@@ -209,6 +209,7 @@ private fun DownloadsList(
     onResume: (PlayerArgs) -> Unit,
     onDelete: (Download) -> Unit,
 ) {
+    val context = LocalContext.current
     // Series and anime share a header per title; movies stand alone.
     val groups = remember(downloads) {
         downloads
