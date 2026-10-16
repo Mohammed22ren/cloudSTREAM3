@@ -21,6 +21,8 @@ data class PlayerArgs(
     val subtitle: String?,
     /** Used to remember where playback stopped. */
     val resumeKey: String,
+    /** What the watch history should record for this playback, or null to not record. */
+    val history: HistoryStore.HistoryEntry? = null,
 )
 
 /**

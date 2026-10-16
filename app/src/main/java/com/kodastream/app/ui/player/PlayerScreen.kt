@@ -93,6 +93,7 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
+import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.PlayerArgs
 import com.kodastream.app.data.SubtitleStyleStore
 import com.kodastream.app.engine.Engine
@@ -307,6 +308,29 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
     val resumeKey = viewModel.args.resumeKey
 
+    var historyRecorded by remember { mutableStateOf(false) }
+
+    /**
+     * Feeds the watch history: the first call past the 5-second mark creates
+     * the entry (upsert, so a series keeps only its newest episode), later
+     * calls only move the progress. Nothing is recorded while history is
+     * paused or when the user peeked for under five seconds. Writes land on a
+     * background dispatcher inside the store, never on the player's thread.
+     */
+    fun recordHistory() {
+        val entry = viewModel.args.history ?: return
+        if (AppPrefs.pauseHistory(context)) return
+        val position = exoPlayer.currentPosition
+        if (position < 5_000L) return
+        val duration = exoPlayer.duration.takeIf { it > 0 } ?: 0L
+        if (!historyRecorded) {
+            HistoryStore.upsert(context, entry.copy(positionMs = position, durationMs = duration))
+            historyRecorded = true
+        } else {
+            HistoryStore.updateProgress(context, entry.key, position, duration)
+        }
+    }
+
     // The subtitle style is applied the moment it changes - also while the
     // style sheet is open, so moving a slider shows on the video behind it.
     LaunchedEffect(subtitleStyle) {
@@ -352,10 +376,16 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) playbackFailed = false
             }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // Pause, end of file, error, backgrounding: progress is saved now.
+                if (!isPlaying) recordHistory()
+            }
         }
         exoPlayer.addListener(listener)
         onDispose {
             exoPlayer.removeListener(listener)
+            recordHistory()
             val position = exoPlayer.currentPosition
             if (exoPlayer.mediaItemCount > 0 && position > 0) {
                 AppPrefs.setPosition(context, resumeKey, position)
@@ -379,11 +409,15 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         exoPlayer.playWhenReady = true
     }
 
-    // Remember where playback is, so closing the app does not lose the place.
+    // Remember where playback is, so closing the app does not lose the place,
+    // and feed the watch history on the same beat.
     LaunchedEffect(exoPlayer) {
         while (true) {
             delay(5_000L)
-            if (exoPlayer.isPlaying) AppPrefs.setPosition(context, resumeKey, exoPlayer.currentPosition)
+            if (exoPlayer.isPlaying) {
+                AppPrefs.setPosition(context, resumeKey, exoPlayer.currentPosition)
+                recordHistory()
+            }
         }
     }
 

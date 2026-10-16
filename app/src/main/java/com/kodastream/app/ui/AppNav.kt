@@ -38,12 +38,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VideoLibrary
@@ -90,6 +92,7 @@ import com.kodastream.app.ui.components.softSpring
 import com.kodastream.app.ui.details.DetailsScreen
 import com.kodastream.app.ui.details.DetailsViewModel
 import com.kodastream.app.ui.extensions.ExtensionsScreen
+import com.kodastream.app.ui.history.HistoryScreen
 import com.kodastream.app.ui.home.HomeScreen
 import com.kodastream.app.ui.library.LibraryScreen
 import com.kodastream.app.ui.player.PlayerScreen
@@ -103,6 +106,7 @@ private object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
     const val LIBRARY = "library"
+    const val HISTORY = "history"
     const val EXTENSIONS = "extensions"
     const val SETTINGS = "settings"
     const val DETAILS = "details/{id}"
@@ -120,6 +124,7 @@ private val topLevelDestinations = listOf(
     TopLevel(Routes.HOME, R.string.nav_home, Icons.Rounded.Home, Icons.Outlined.Home),
     TopLevel(Routes.SEARCH, R.string.nav_search, Icons.Rounded.Search, Icons.Outlined.Search),
     TopLevel(Routes.LIBRARY, R.string.nav_library, Icons.Rounded.VideoLibrary, Icons.Outlined.VideoLibrary),
+    TopLevel(Routes.HISTORY, R.string.nav_history, Icons.Rounded.History, Icons.Outlined.History),
     TopLevel(Routes.EXTENSIONS, R.string.nav_extensions, Icons.Rounded.Extension, Icons.Outlined.Extension),
     TopLevel(Routes.SETTINGS, R.string.nav_settings, Icons.Rounded.Settings, Icons.Outlined.Settings),
 )
@@ -307,6 +312,15 @@ private fun AppNavGraph(
             LibraryScreen(
                 contentPadding = contentPadding,
                 onOpenItem = navController::openDetails,
+            )
+        }
+        composable(Routes.HISTORY) {
+            HistoryScreen(
+                contentPadding = contentPadding,
+                onOpenItem = navController::openDetails,
+                onResume = { playerArgs ->
+                    navController.navigate("player/${NavArgs.put(playerArgs)}")
+                },
             )
         }
         composable(Routes.EXTENSIONS) {

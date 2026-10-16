@@ -13,6 +13,7 @@ object AppPrefs {
     private const val KEY_AUTO_UPDATE = "auto_update_extensions"
     private const val KEY_NAV_POSITION = "nav_position"
     private const val KEY_SPEED = "playback_speed"
+    private const val KEY_PAUSE_HISTORY = "pause_history"
     private const val POSITION_PREFIX = "pos_"
 
     const val NAV_SIDE = "side"
@@ -39,6 +40,13 @@ object AppPrefs {
 
     fun setPlaybackSpeed(context: Context, value: Float) {
         prefs(context).edit { putFloat(KEY_SPEED, value) }
+    }
+
+    /** True when nothing new should be written to the watch history. Existing entries stay. */
+    fun pauseHistory(context: Context): Boolean = prefs(context).getBoolean(KEY_PAUSE_HISTORY, false)
+
+    fun setPauseHistory(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(KEY_PAUSE_HISTORY, value) }
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

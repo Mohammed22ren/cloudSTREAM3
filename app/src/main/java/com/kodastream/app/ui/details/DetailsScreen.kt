@@ -61,6 +61,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
 import com.kodastream.app.data.DetailsArgs
+import com.kodastream.app.data.HistoryStore.HistoryEntry
 import com.kodastream.app.data.LibraryStore
 import com.kodastream.app.data.LibraryStore.LibraryItem
 import com.kodastream.app.data.PlayerArgs
@@ -276,14 +277,34 @@ private fun DetailsContent(
     var plotExpanded by remember(response) { mutableStateOf(false) }
     val directData = directDataOf(response)
 
-    fun play(data: String, subtitle: String?) {
+    fun play(data: String, subtitle: String?, episode: Episode? = null) {
+        val resumeKey = response.apiName + "|" + data
         onPlay(
             PlayerArgs(
                 apiName = response.apiName,
                 data = data,
                 title = title,
                 subtitle = subtitle,
-                resumeKey = response.apiName + "|" + data,
+                resumeKey = resumeKey,
+                history = HistoryEntry(
+                    key = response.apiName + "|" + response.url,
+                    apiName = response.apiName,
+                    url = response.url,
+                    title = title,
+                    posterUrl = response.posterUrl,
+                    posterHeaders = response.posterHeaders,
+                    type = when (response) {
+                        is AnimeLoadResponse -> "anime"
+                        is TvSeriesLoadResponse -> "series"
+                        else -> "movie"
+                    },
+                    season = episode?.season ?: selectedSeason,
+                    episode = episode?.episode,
+                    episodeTitle = episode?.name,
+                    data = data,
+                    subtitle = subtitle,
+                    resumeKey = resumeKey,
+                ),
             )
         )
     }
@@ -447,7 +468,7 @@ private fun DetailsContent(
                     episode = episode,
                     index = index,
                     posterHeaders = response.posterHeaders,
-                    onClick = { play(episode.data, label) },
+                    onClick = { play(episode.data, label, episode) },
                 )
             }
         }

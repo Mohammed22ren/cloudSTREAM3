@@ -128,4 +128,19 @@
     <string name="font_import">استيراد خط…</string>
     <string name="subtitle_reset">إعادة تعيين</string>
     <string name="none">بلا</string>
+    <string name="nav_history">السجل</string>
+    <string name="history_today">اليوم</string>
+    <string name="history_yesterday">أمس</string>
+    <string name="history_earlier">أقدم</string>
+    <string name="history_empty_title">لا يوجد شيء في السجل بعد</string>
+    <string name="history_empty_hint">كل ما تشاهده سيظهر هنا جاهزًا للاستكمال.</string>
+    <string name="history_removed">تم الحذف من السجل</string>
+    <string name="history_undo">تراجع</string>
+    <string name="cd_remove_history">إزالة من السجل</string>
+    <string name="cd_history_clear">مسح كل السجل</string>
+    <string name="history_clear_all">مسح السجل</string>
+    <string name="history_clear_confirm_title">مسح كل السجل؟</string>
+    <string name="history_clear_confirm_text">سيتم حذف جميع العناصر ولا يمكن التراجع عن ذلك.</string>
+    <string name="settings_pause_history">إيقاف حفظ السجل</string>
+    <string name="settings_pause_history_summary">عند التشغيل، لن يتم تسجيل ما تشاهده. العناصر المحفوظة تبقى كما هي.</string>
 </resources>

@@ -55,6 +55,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     var autoUpdate by remember { mutableStateOf(AppPrefs.autoUpdate(context)) }
     var navPosition by remember { mutableStateOf(AppPrefs.navPosition(context)) }
+    var pauseHistory by remember { mutableStateOf(AppPrefs.pauseHistory(context)) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -128,6 +129,19 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+
+        // ---------------------------------------------------------------- history
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_pause_history),
+                summary = stringResource(R.string.settings_pause_history_summary),
+                checked = pauseHistory,
+                onCheckedChange = { value ->
+                    AppPrefs.setPauseHistory(context, value)
+                    pauseHistory = value
+                },
+            )
         }
 
         item {
