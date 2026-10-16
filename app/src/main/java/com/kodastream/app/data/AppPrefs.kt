@@ -12,6 +12,7 @@ object AppPrefs {
     private const val KEY_PROVIDER = "selected_provider"
     private const val KEY_AUTO_UPDATE = "auto_update_extensions"
     private const val KEY_NAV_POSITION = "nav_position"
+    private const val KEY_SPEED = "playback_speed"
     private const val POSITION_PREFIX = "pos_"
 
     const val NAV_SIDE = "side"
@@ -31,6 +32,13 @@ object AppPrefs {
     fun setNavPosition(context: Context, value: String) {
         _navPosition.value = value
         prefs(context).edit { putString(KEY_NAV_POSITION, value) }
+    }
+
+    /** The player's chosen speed, remembered between episodes. */
+    fun playbackSpeed(context: Context): Float = prefs(context).getFloat(KEY_SPEED, 1f)
+
+    fun setPlaybackSpeed(context: Context, value: Float) {
+        prefs(context).edit { putFloat(KEY_SPEED, value) }
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

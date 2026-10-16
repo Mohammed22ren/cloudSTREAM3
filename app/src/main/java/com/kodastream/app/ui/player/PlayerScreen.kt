@@ -3,12 +3,16 @@
 package com.kodastream.app.ui.player
 
 import android.content.pm.ActivityInfo
+import android.graphics.Typeface
 import android.net.Uri
 import android.view.View
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,15 +27,21 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -44,13 +54,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -69,10 +83,13 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.PlayerArgs
+import com.kodastream.app.data.SubtitleStyleStore
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
 import com.kodastream.app.ui.components.ErrorBox
@@ -85,6 +102,7 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -233,6 +251,28 @@ private fun buildMediaSource(link: ExtractorLink, api: MainAPI?, subtitle: Subti
     return DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(item)
 }
 
+/** Draws [style] on the player's subtitle view, overriding embedded caption styling. */
+private fun applySubtitleStyle(context: android.content.Context, view: PlayerView, style: SubtitleStyleStore.SubtitleStyle) {
+    val subtitleView = view.subtitleView ?: return
+    subtitleView.setApplyEmbeddedStyles(false)
+    subtitleView.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * style.fontSize)
+    val typeface = style.fontFile
+        ?.let { File(File(context.filesDir, "subtitle_fonts"), it) }
+        ?.takeIf { it.exists() }
+        ?.let { runCatching { Typeface.createFromFile(it) }.getOrNull() }
+        ?: Typeface.SANS_SERIF
+    subtitleView.setStyle(
+        CaptionStyleCompat(
+            style.textColor.toInt(),
+            style.bgColor.toInt(),
+            android.graphics.Color.TRANSPARENT,
+            style.edgeType,
+            style.edgeColor.toInt(),
+            typeface,
+        )
+    )
+}
+
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -248,10 +288,30 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
 
     var controllerVisible by remember { mutableStateOf(true) }
     var showSources by remember { mutableStateOf(false) }
+    var showStyleSheet by remember { mutableStateOf(false) }
     var playbackFailed by remember { mutableStateOf(false) }
+
+    var resizeMode by remember { mutableStateOf(PlayerView.RESIZE_MODE_FIT) }
+    var speed by remember { mutableStateOf(AppPrefs.playbackSpeed(context)) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+    val subtitleStyle by SubtitleStyleStore.style.collectAsState(
+        initial = remember { SubtitleStyleStore.current(context) }
+    )
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
     val resumeKey = viewModel.args.resumeKey
+
+    // The subtitle style is applied the moment it changes - also while the
+    // style sheet is open, so moving a slider shows on the video behind it.
+    LaunchedEffect(subtitleStyle) {
+        playerViewRef?.let { applySubtitleStyle(context, it, subtitleStyle) }
+    }
+    LaunchedEffect(resizeMode) {
+        playerViewRef?.resizeMode = resizeMode
+    }
+    LaunchedEffect(speed) {
+        exoPlayer.setPlaybackSpeed(speed)
+    }
 
     // Landscape and no system bars while the player is open; everything is put back afterwards.
     DisposableEffect(activity) {
@@ -334,6 +394,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = true
+                    resizeMode = PlayerView.RESIZE_MODE_FIT
                     controllerShowTimeoutMs = 3_000
                     setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     setControllerVisibilityListener(
@@ -341,6 +402,8 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                             controllerVisible = visibility == View.VISIBLE
                         }
                     )
+                    applySubtitleStyle(ctx, this, subtitleStyle)
+                    playerViewRef = this
                 }
             },
         )
@@ -406,6 +469,19 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         )
                     }
                 }
+                IconButton(onClick = {
+                    resizeMode = when (resizeMode) {
+                        PlayerView.RESIZE_MODE_FIT -> PlayerView.RESIZE_MODE_ZOOM
+                        PlayerView.RESIZE_MODE_ZOOM -> PlayerView.RESIZE_MODE_FILL
+                        else -> PlayerView.RESIZE_MODE_FIT
+                    }
+                }) {
+                    Icon(
+                        Icons.Rounded.AspectRatio,
+                        contentDescription = stringResource(R.string.cd_resize),
+                        tint = Color.White,
+                    )
+                }
             }
         }
     }
@@ -417,6 +493,11 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             selectedLink = selectedLink,
             selectedSubtitle = selectedSubtitle,
             resolving = resolving,
+            speed = speed,
+            onSpeed = {
+                speed = it
+                AppPrefs.setPlaybackSpeed(context, it)
+            },
             onSelectLink = {
                 viewModel.selectLink(it)
                 showSources = false
@@ -425,8 +506,16 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 viewModel.selectSubtitle(it)
                 showSources = false
             },
+            onOpenStyle = {
+                showSources = false
+                showStyleSheet = true
+            },
             onDismiss = { showSources = false },
         )
+    }
+
+    if (showStyleSheet) {
+        SubtitleStyleSheet(onDismiss = { showStyleSheet = false })
     }
 }
 
@@ -437,8 +526,11 @@ private fun SourcesSheet(
     selectedLink: ExtractorLink?,
     selectedSubtitle: SubtitleFile?,
     resolving: Boolean,
+    speed: Float,
+    onSpeed: (Float) -> Unit,
     onSelectLink: (ExtractorLink) -> Unit,
     onSelectSubtitle: (SubtitleFile?) -> Unit,
+    onOpenStyle: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(
@@ -499,6 +591,48 @@ private fun SourcesSheet(
                     )
                 }
             }
+            item { Spacer(Modifier.height(16.dp)) }
+            item {
+                Text(
+                    text = stringResource(R.string.playback_speed),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 8.dp),
+                )
+            }
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)) { value ->
+                        FilterChip(
+                            selected = speed == value,
+                            onClick = { onSpeed(value) },
+                            label = { Text(if (value == 1f) "1x" else "${value}x") },
+                        )
+                    }
+                }
+            }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenStyle)
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.subtitles_style),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(R.string.edit),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
@@ -521,5 +655,270 @@ private fun ChoiceRow(selected: Boolean, label: String, onClick: () -> Unit) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/**
+ * The subtitle look, edited live: the preview mirrors the style, and every
+ * change lands on the video behind the sheet the moment it is made. The
+ * same knobs CloudStream's player exposes: size, text and background
+ * colour, edge, and font - including fonts imported from the device.
+ */
+@Composable
+private fun SubtitleStyleSheet(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val style by SubtitleStyleStore.style.collectAsState(
+        initial = remember { SubtitleStyleStore.current(context) }
+    )
+    val fonts = remember(style) { SubtitleStyleStore.fonts(context) }
+
+    val importFont = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            SubtitleStyleStore.importFont(context, uri)?.let { name ->
+                SubtitleStyleStore.update(context) { it.copy(fontFile = name) }
+            }
+        }
+    }
+
+    // Local slider state so dragging does not hammer the store on every frame.
+    var pendingSize by remember(style) { mutableStateOf(style.fontSize) }
+
+    val previewTypeface = style.fontFile
+        ?.let { File(File(context.filesDir, "subtitle_fonts"), it) }
+        ?.takeIf { it.exists() }
+        ?.let { runCatching { Typeface.createFromFile(it) }.getOrNull() }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Text(
+                    text = stringResource(R.string.subtitles_style),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+            }
+
+            // ---- preview ----
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(Color(0xFF202020))
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val shadow = when (style.edgeType) {
+                        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                        CaptionStyleCompat.EDGE_TYPE_RAISED,
+                        -> Shadow(
+                            color = Color(style.edgeColor.toInt()),
+                            elevation = if (style.edgeType == CaptionStyleCompat.EDGE_TYPE_RAISED) 8f else 4f,
+                        )
+
+                        else -> Shadow(Color.Transparent, 0f)
+                    }
+                    Text(
+                        text = stringResource(R.string.subtitle_preview),
+                        color = Color(style.textColor.toInt()),
+                        fontSize = (16 * style.fontSize).sp,
+                        fontFamily = previewTypeface?.let { FontFamily(it) },
+                        style = androidx.compose.material3.LocalTextStyle.current.copy(shadow = shadow),
+                        modifier = if ((style.bgColor.toInt() and 0xFF000000.toInt()) != 0) {
+                            Modifier.background(Color(style.bgColor.toInt()))
+                        } else {
+                            Modifier
+                        },
+                    )
+                }
+            }
+
+            // ---- size ----
+            item {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.subtitle_size),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "${(pendingSize * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Slider(
+                        value = pendingSize,
+                        onValueChange = { pendingSize = it },
+                        onValueChangeFinished = {
+                            val rounded = (pendingSize * 20f).toInt() / 20f
+                            SubtitleStyleStore.update(context) { it.copy(fontSize = rounded) }
+                        },
+                        valueRange = 0.5f..2f,
+                    )
+                }
+            }
+
+            // ---- colors ----
+            item {
+                SwatchRow(
+                    label = stringResource(R.string.subtitle_text_color),
+                    swatches = listOf(0xFFFFFFFF, 0xFFFFFF00, 0xFF00FFFF, 0xFF00FF00, 0xFFFF6060, 0xFF000000),
+                    selected = style.textColor,
+                ) { color -> SubtitleStyleStore.update(context) { it.copy(textColor = color) } }
+            }
+            item {
+                SwatchRow(
+                    label = stringResource(R.string.subtitle_bg_color),
+                    swatches = listOf(0x00000000, 0x66000000, 0xFF000000, 0xFFFFFFFF),
+                    selected = style.bgColor,
+                ) { color -> SubtitleStyleStore.update(context) { it.copy(bgColor = color) } }
+            }
+            item {
+                SwatchRow(
+                    label = stringResource(R.string.subtitle_edge_color),
+                    swatches = listOf(0xFF000000, 0xFFFFFFFF, 0xFFFFFF00),
+                    selected = style.edgeColor,
+                ) { color -> SubtitleStyleStore.update(context) { it.copy(edgeColor = color) } }
+            }
+
+            // ---- edge ----
+            item {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Text(
+                        text = stringResource(R.string.subtitle_edge),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = style.edgeType == CaptionStyleCompat.EDGE_TYPE_NONE,
+                                onClick = { SubtitleStyleStore.update(context) { it.copy(edgeType = CaptionStyleCompat.EDGE_TYPE_NONE) } },
+                                label = { Text(stringResource(R.string.edge_none)) },
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = style.edgeType == CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                                onClick = { SubtitleStyleStore.update(context) { it.copy(edgeType = CaptionStyleCompat.EDGE_TYPE_OUTLINE) } },
+                                label = { Text(stringResource(R.string.edge_outline)) },
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = style.edgeType == CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                                onClick = { SubtitleStyleStore.update(context) { it.copy(edgeType = CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW) } },
+                                label = { Text(stringResource(R.string.edge_shadow)) },
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = style.edgeType == CaptionStyleCompat.EDGE_TYPE_RAISED,
+                                onClick = { SubtitleStyleStore.update(context) { it.copy(edgeType = CaptionStyleCompat.EDGE_TYPE_RAISED) } },
+                                label = { Text(stringResource(R.string.edge_raised)) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ---- font ----
+            item {
+                Column(Modifier.padding(horizontal = 24.dp)) {
+                    Text(
+                        text = stringResource(R.string.subtitle_font),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = style.fontFile == null,
+                                onClick = { SubtitleStyleStore.update(context) { it.copy(fontFile = null) } },
+                                label = { Text(stringResource(R.string.font_default)) },
+                            )
+                        }
+                        items(fonts) { name ->
+                            FilterChip(
+                                selected = style.fontFile == name,
+                                onClick = { SubtitleStyleStore.update(context) { it.copy(fontFile = name) } },
+                                label = { Text(name.removeSuffix(".ttf").removeSuffix(".otf").substringBeforeLast('_')) },
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { importFont.launch(arrayOf("font/*", "application/octet-stream")) },
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Rounded.Add,
+                        contentDescription = null,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.font_import))
+                }
+            }
+            item {
+                androidx.compose.material3.TextButton(
+                    onClick = { SubtitleStyleStore.reset(context) },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                ) {
+                    Text(stringResource(R.string.subtitle_reset))
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+/** A label plus a row of colour circles, one of which is selected. */
+@Composable
+private fun SwatchRow(
+    label: String,
+    swatches: List<Long>,
+    selected: Long,
+    onPick: (Long) -> Unit,
+) {
+    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = label, style = MaterialTheme.typography.titleMedium)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(swatches) { color ->
+                val isSelected = color == selected
+                val isTransparent = (color.toInt() and 0xFF000000.toInt()) == 0
+                Box(
+                    modifier = Modifier
+                        .size(if (isSelected) 40.dp else 34.dp)
+                        .clip(CircleShape)
+                        .background(if (isTransparent) Color.Transparent else Color(color.toInt()))
+                        .border(
+                            width = if (isSelected) 3.dp else 1.dp,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            shape = CircleShape,
+                        )
+                        .clickable { onPick(color) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isTransparent) {
+                        Text(
+                            text = stringResource(R.string.none),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

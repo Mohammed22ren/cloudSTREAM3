@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
@@ -43,7 +44,9 @@ import com.kodastream.app.engine.Engine
 import com.kodastream.app.ui.components.EmptyBox
 import com.kodastream.app.ui.components.PosterCard
 import com.kodastream.app.ui.components.SectionHeader
+import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.plugins.PluginManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,9 +69,21 @@ class SearchViewModel : ViewModel() {
     private val _searched = MutableStateFlow(false)
     val searched: StateFlow<Boolean> = _searched.asStateFlow()
 
+    /** The installed providers, refreshed when extensions change. */
+    private val _providers = MutableStateFlow<List<MainAPI>>(emptyList())
+    val providers: StateFlow<List<MainAPI>> = _providers.asStateFlow()
+
     private var job: Job? = null
 
-    fun submit(query: String) {
+    init {
+        viewModelScope.launch {
+            // Fires once immediately, then again on every install/update/remove.
+            PluginManager.revision.collect { _providers.value = Engine.providers() }
+        }
+    }
+
+    /** [scope] narrows the search to one provider by name; null searches every provider. */
+    fun submit(query: String, scope: String? = null) {
         val text = query.trim()
         if (text.isEmpty()) return
         job?.cancel()
@@ -77,7 +92,8 @@ class SearchViewModel : ViewModel() {
             _searched.value = true
             _groups.value = emptyList()
 
-            val providers = Engine.providers()
+            val all = Engine.providers()
+            val providers = if (scope == null) all else all.filter { it.name == scope }
             val results = arrayOfNulls<SearchGroup>(providers.size)
             val gate = Semaphore(4)
             coroutineScope {
@@ -116,7 +132,10 @@ fun SearchScreen(
     val groups by viewModel.groups.collectAsState()
     val searching by viewModel.searching.collectAsState()
     val searched by viewModel.searched.collectAsState()
+    val providers by viewModel.providers.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    // Which single provider to search, or null for every provider at once.
+    var scope by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -140,7 +159,7 @@ fun SearchScreen(
                 }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { viewModel.submit(query) }),
+            keyboardActions = KeyboardActions(onSearch = { viewModel.submit(query, scope) }),
             shape = MaterialTheme.shapes.extraLarge,
             colors = TextFieldDefaults.colors(
                 focusedIndicatorColor = Color.Transparent,
@@ -152,6 +171,36 @@ fun SearchScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         )
+
+        // The source picker: all providers at once, or just one. A query that
+        // is already typed re-runs the moment the scope changes.
+        if (providers.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item(key = "all") {
+                    FilterChip(
+                        selected = scope == null,
+                        onClick = {
+                            scope = null
+                            if (query.isNotBlank()) viewModel.submit(query, null) else viewModel.clear()
+                        },
+                        label = { Text(stringResource(R.string.search_scope_all)) },
+                    )
+                }
+                items(providers, key = { it.name }) { api ->
+                    FilterChip(
+                        selected = scope == api.name,
+                        onClick = {
+                            scope = api.name
+                            if (query.isNotBlank()) viewModel.submit(query, api.name) else viewModel.clear()
+                        },
+                        label = { Text(api.name) },
+                    )
+                }
+            }
+        }
 
         Box(Modifier.fillMaxSize()) {
             when {

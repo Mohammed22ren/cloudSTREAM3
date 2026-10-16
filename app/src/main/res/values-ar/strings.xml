@@ -108,4 +108,24 @@
     <string name="settings_navigation">موضع شريط التنقل</string>
     <string name="nav_position_side">الجانب (يسار)</string>
     <string name="nav_position_bottom">الأسفل</string>
+    <string name="search_scope_all">كل المصادر</string>
+    <string name="cd_resize">وضع التحجيم</string>
+    <string name="playback_speed">سرعة التشغيل</string>
+    <string name="subtitles_style">نمط الترجمة</string>
+    <string name="edit">تعديل</string>
+    <string name="subtitle_preview">هكذا ستظهر الترجمة.</string>
+    <string name="subtitle_size">الحجم</string>
+    <string name="subtitle_text_color">لون النص</string>
+    <string name="subtitle_bg_color">الخلفية</string>
+    <string name="subtitle_edge">الحدود</string>
+    <string name="subtitle_edge_color">لون الحدود</string>
+    <string name="edge_none">بلا</string>
+    <string name="edge_outline">حدود</string>
+    <string name="edge_shadow">ظل</string>
+    <string name="edge_raised">بارز</string>
+    <string name="subtitle_font">الخط</string>
+    <string name="font_default">افتراضي</string>
+    <string name="font_import">استيراد خط…</string>
+    <string name="subtitle_reset">إعادة تعيين</string>
+    <string name="none">بلا</string>
 </resources>

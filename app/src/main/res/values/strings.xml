@@ -108,4 +108,24 @@
     <string name="settings_navigation">Navigation bar position</string>
     <string name="nav_position_side">Side (left)</string>
     <string name="nav_position_bottom">Bottom</string>
+    <string name="search_scope_all">All sources</string>
+    <string name="cd_resize">Resize mode</string>
+    <string name="playback_speed">Playback speed</string>
+    <string name="subtitles_style">Subtitle style</string>
+    <string name="edit">Edit</string>
+    <string name="subtitle_preview">This is how your subtitles will look.</string>
+    <string name="subtitle_size">Size</string>
+    <string name="subtitle_text_color">Text color</string>
+    <string name="subtitle_bg_color">Background</string>
+    <string name="subtitle_edge">Edge</string>
+    <string name="subtitle_edge_color">Edge color</string>
+    <string name="edge_none">None</string>
+    <string name="edge_outline">Outline</string>
+    <string name="edge_shadow">Shadow</string>
+    <string name="edge_raised">Raised</string>
+    <string name="subtitle_font">Font</string>
+    <string name="font_default">Default</string>
+    <string name="font_import">Import font…</string>
+    <string name="subtitle_reset">Reset</string>
+    <string name="none">None</string>
 </resources>
