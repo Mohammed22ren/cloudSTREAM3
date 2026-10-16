@@ -1,6 +1,8 @@
 package com.kodastream.app.ui.home
 
 import android.app.Application
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LoadingIndicator
@@ -20,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -33,9 +37,14 @@ import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
 import com.kodastream.app.ui.components.EmptyBox
 import com.kodastream.app.ui.components.ErrorBox
+import com.kodastream.app.ui.components.ExpressivePullToRefresh
 import com.kodastream.app.ui.components.LoadingBox
 import com.kodastream.app.ui.components.PosterCard
+import com.kodastream.app.ui.components.PosterShelfSkeleton
 import com.kodastream.app.ui.components.SectionHeader
+import com.kodastream.app.ui.components.SkeletonTextLine
+import com.kodastream.app.ui.components.ThumbRowSkeleton
+import com.kodastream.app.ui.components.staggeredEnter
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.plugins.PluginManager
@@ -182,72 +191,133 @@ fun HomeScreen(
                 Button(onClick = onOpenExtensions) { Text(stringResource(R.string.open_extensions)) }
             }
 
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = contentPadding.calculateTopPadding() + 8.dp,
-                    bottom = contentPadding.calculateBottomPadding() + 16.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            else -> ExpressivePullToRefresh(
+                isRefreshing = loading,
+                onRefresh = viewModel::retry,
             ) {
-                item(key = "providers") {
+                HomeShelves(
+                    providers = providers,
+                    selected = selected,
+                    rows = rows,
+                    loading = loading,
+                    error = error,
+                    contentPadding = contentPadding,
+                    onSelectProvider = viewModel::select,
+                    onOpenItem = onOpenItem,
+                    onRetry = viewModel::retry,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The shelves themselves, split out of the pull-to-refresh wrapper so the
+ * refresh container is not recomposed on every provider switch.
+ */
+@Composable
+private fun HomeShelves(
+    providers: List<MainAPI>,
+    selected: String?,
+    rows: List<HomeRow>,
+    loading: Boolean,
+    error: String?,
+    contentPadding: PaddingValues,
+    onSelectProvider: (String) -> Unit,
+    onOpenItem: (SearchResponse) -> Unit,
+    onRetry: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = contentPadding.calculateTopPadding() + 8.dp,
+            bottom = contentPadding.calculateBottomPadding() + 16.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item(key = "providers") {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(providers) { api ->
+                    FilterChip(
+                        selected = api.name == selected,
+                        onClick = { onSelectProvider(api.name) },
+                        label = { Text(api.name) },
+                    )
+                }
+            }
+        }
+
+        if (rows.isEmpty() && loading) {
+            // Placeholders at the shelf's real size and shape: the chrome
+            // (provider chips, headers) is already on screen and stays, only
+            // the blocked regions breathe.
+            item(key = "skeleton-1") {
+                Column {
+                    SkeletonTextLine(
+                        width = 140.dp,
+                        height = 20.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                    PosterShelfSkeleton()
+                }
+            }
+            item(key = "skeleton-2") {
+                Column {
+                    SkeletonTextLine(
+                        width = 180.dp,
+                        height = 20.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                    ThumbRowSkeleton()
+                }
+            }
+        } else if (rows.isEmpty()) {
+            item(key = "error") {
+                Box(Modifier.fillMaxWidth().height(360.dp)) {
+                    ErrorBox(
+                        message = error?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.nothing_found),
+                        onRetry = onRetry,
+                    )
+                }
+            }
+        }
+
+        itemsIndexed(rows, key = { _, row -> row.key }) { index, row ->
+            // Each shelf enters once, a step later than the one above it;
+            // the delay is capped so shelves far down the list are not
+            // waiting behind shelves that are not even visible yet.
+            val entrance = remember { MutableTransitionState(false).apply { targetState = true } }
+            AnimatedVisibility(
+                visibleState = entrance,
+                enter = staggeredEnter(index.coerceAtMost(8)),
+            ) {
+                Column {
+                    SectionHeader(row.title)
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(providers) { api ->
-                            FilterChip(
-                                selected = api.name == selected,
-                                onClick = { viewModel.select(api.name) },
-                                label = { Text(api.name) },
+                        // No keys here: providers sometimes return the same item twice.
+                        items(row.items) { item ->
+                            PosterCard(
+                                item = item,
+                                horizontal = row.horizontal,
+                                onClick = { onOpenItem(item) },
                             )
                         }
                     }
                 }
+            }
+        }
 
-                if (rows.isEmpty() && loading) {
-                    item(key = "loading") {
-                        Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) {
-                            LoadingIndicator(Modifier.size(44.dp))
-                        }
-                    }
-                } else if (rows.isEmpty()) {
-                    item(key = "error") {
-                        Box(Modifier.fillMaxWidth().height(360.dp)) {
-                            ErrorBox(
-                                message = error?.takeIf { it.isNotBlank() }
-                                    ?: stringResource(R.string.nothing_found),
-                                onRetry = viewModel::retry,
-                            )
-                        }
-                    }
-                }
-
-                items(rows, key = { it.key }) { row ->
-                    Column {
-                        SectionHeader(row.title)
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            // No keys here: providers sometimes return the same item twice.
-                            items(row.items) { item ->
-                                PosterCard(
-                                    item = item,
-                                    horizontal = row.horizontal,
-                                    onClick = { onOpenItem(item) },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (rows.isNotEmpty() && loading) {
-                    item(key = "more") {
-                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            LoadingIndicator(Modifier.size(32.dp))
-                        }
-                    }
+        if (rows.isNotEmpty() && loading) {
+            item(key = "more") {
+                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    LoadingIndicator(Modifier.size(32.dp))
                 }
             }
         }
