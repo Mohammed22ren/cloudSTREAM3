@@ -56,10 +56,10 @@ object LibraryStore {
 
     /** Adds when missing, removes when present; returns the new state. */
     fun toggleFavorite(context: Context, item: SearchResponse): Boolean =
-        toggle(context, FAVORITES, LibraryItem(item))
+        toggle(context, FAVORITES, toLibraryItem(item))
 
     fun toggleWatchlist(context: Context, item: SearchResponse): Boolean =
-        toggle(context, WATCHLIST, LibraryItem(item))
+        toggle(context, WATCHLIST, toLibraryItem(item))
 
     /** The same toggles for entries already in store form (details screen). */
     fun toggleFavorite(context: Context, item: LibraryItem): Boolean =
@@ -76,7 +76,7 @@ object LibraryStore {
         _revision.value++
     }
 
-    private fun LibraryItem(source: SearchResponse) = LibraryItem(
+    private fun toLibraryItem(source: SearchResponse) = LibraryItem(
         apiName = source.apiName,
         url = source.url,
         name = source.name,
