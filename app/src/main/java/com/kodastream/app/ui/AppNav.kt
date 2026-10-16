@@ -6,9 +6,11 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
@@ -20,8 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutoutPadding
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Extension
@@ -48,8 +51,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +65,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -120,6 +124,57 @@ private val topLevelDestinations = listOf(
     TopLevel(Routes.SETTINGS, R.string.nav_settings, Icons.Rounded.Settings, Icons.Outlined.Settings),
 )
 
+// ------------------------------------------------------------------ shared nav motion
+
+/**
+ * The animation language both navigation bars speak, extracted so the side
+ * pill and the bottom pill feel identical: colours cross-fade on one 200ms
+ * tween, the item's inner padding and the label's appearance/disappearance
+ * ride the expressive fast-spatial spring, and the label shows only for the
+ * open tab. The bars differ only in the axis the active pill expands on -
+ * horizontally in the bottom bar with the label beside the icon, vertically
+ * in the side bar with the label under it.
+ */
+private const val NAV_COLOR_MS = 200
+
+private val NavItemPaddingCollapsed = 12.dp
+private val NavItemPaddingExpanded = 20.dp
+
+/** The shared size of every nav icon, active or not. */
+private val NavIconSize = 24.dp
+
+/** The gap between an item's icon and its expanding label. */
+private val NavLabelGap = 8.dp
+
+@Composable
+private fun navItemPadding(selected: Boolean): Dp =
+    animateDpAsState(
+        targetValue = if (selected) NavItemPaddingExpanded else NavItemPaddingCollapsed,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "navItemPadding",
+    ).value
+
+@Composable
+private fun navContainerColor(selected: Boolean, activeContainer: Color): Color =
+    animateColorAsState(
+        targetValue = if (selected) activeContainer else Color.Transparent,
+        animationSpec = tween(durationMillis = NAV_COLOR_MS),
+        label = "navContainerColor",
+    ).value
+
+@Composable
+private fun navContentColor(selected: Boolean, activeContent: Color): Color =
+    animateColorAsState(
+        targetValue = if (selected) activeContent else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = NAV_COLOR_MS),
+        label = "navContentColor",
+    ).value
+
+// The side bar's fixed geometry: the pill is 64dp wide, its items get a
+// 48dp touch target inside, and the whole bar floats 14dp off the edge.
+private val SideBarWidth = 64.dp
+private val SideBarMargin = 14.dp
+
 private fun NavHostController.navigateTopLevel(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
@@ -171,19 +226,39 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
         else -> PaddingValues(top = topInset, bottom = 84.dp + navInset)
     }
 
-    // The app keeps its locale direction everywhere. The one exception is the
-    // shell row that pins the rail: in Arabic it must still put the rail on
-    // the left, so that row is LTR and the content slot gets the original
-    // direction re-provided inside it.
+    // The app keeps its locale direction everywhere; the side bar is pinned
+    // to the left even in Arabic, so only its slot is LTR.
     val contentDirection = LocalLayoutDirection.current
 
     if (sideMode) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Row(Modifier.fillMaxSize()) {
-                SideNavRail(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
-                CompositionLocalProvider(LocalLayoutDirection provides contentDirection) {
-                    AppNavGraph(navController, themeViewModel, contentPadding)
-                }
+        Box(Modifier.fillMaxSize()) {
+            // The content shifts clear of the bar's strip: from the left
+            // edge in LTR locales, and from the same left edge in RTL via
+            // `end` (which in RTL is the left side). The bar floats on top.
+            val contentShift = if (contentDirection == LayoutDirection.Ltr) {
+                Modifier.padding(start = SideBarWidth + SideBarMargin)
+            } else {
+                Modifier.padding(end = SideBarWidth + SideBarMargin)
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(contentShift)
+            ) {
+                AppNavGraph(navController, themeViewModel, contentPadding)
+            }
+
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                FloatingSideBar(
+                    selectedRoute = route,
+                    onSelect = { navController.navigateTopLevel(it) },
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .displayCutoutPadding()
+                        .padding(start = SideBarMargin),
+                )
             }
         }
     } else {
@@ -283,39 +358,37 @@ private fun AppNavGraph(
 }
 
 /**
- * The side rail: same five destinations, same icons, same order as the pill,
- * drawn vertically with the label under each icon. Scrollable so short
- * screens in landscape do not clip the last item.
+ * The floating side pill: a stadium-ended vertical bar centered on the
+ * left edge, wrapping its content, over the page rather than attached to
+ * it. Same five destinations, same icons, same order as the bottom bar.
+ * Scrollable for short screens in landscape; the insets in [modifier]'s
+ * chain cap its height to the space between the status and nav bars.
  */
 @Composable
-private fun SideNavRail(selectedRoute: String?, onSelect: (String) -> Unit) {
-    NavigationRail(
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxHeight()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .displayCutoutPadding(),
+private fun FloatingSideBar(
+    selectedRoute: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 2.dp,
     ) {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
+        Column(
+            modifier = Modifier
+                .width(SideBarWidth)
+                .padding(horizontal = 8.dp, vertical = 10.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             topLevelDestinations.forEach { destination ->
-                val selected = selectedRoute == destination.route
-                NavigationRailItem(
-                    selected = selected,
+                SideNavItem(
+                    destination = destination,
+                    selected = selectedRoute == destination.route,
                     onClick = { onSelect(destination.route) },
-                    icon = {
-                        Icon(
-                            imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
-                            contentDescription = null,
-                        )
-                    },
-                    label = {
-                        Text(
-                            text = stringResource(destination.labelRes),
-                            maxLines = 1,
-                        )
-                    },
-                    alwaysShowLabel = true,
                 )
             }
         }
@@ -323,9 +396,77 @@ private fun SideNavRail(selectedRoute: String?, onSelect: (String) -> Unit) {
 }
 
 /**
- * The floating navigation pill: one tonal capsule, the open tab expanding to
- * say its name, the rest as icons. Ported from Koda's home pill, with the
- * tab set replaced by KodaStream's routes.
+ * One side-bar item: the open tab's pill expands vertically with its label
+ * sliding in under the icon, on exactly the shared specs - the same 200ms
+ * colour tween, the same fast-spatial spring, the same 12-to-20dp padding
+ * growth - as the bottom bar's item.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SideNavItem(
+    destination: TopLevel,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val animatedPadding = navItemPadding(selected)
+    val animatedContainerColor = navContainerColor(
+        selected = selected,
+        activeContainer = MaterialTheme.colorScheme.secondaryContainer,
+    )
+    val animatedContentColor = navContentColor(
+        selected = selected,
+        activeContent = MaterialTheme.colorScheme.onSecondaryContainer,
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = animatedContainerColor,
+        contentColor = animatedContentColor,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(vertical = animatedPadding)
+                .animateContentSize(
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
+                contentDescription = stringResource(destination.labelRes),
+                modifier = Modifier.size(NavIconSize),
+            )
+            // The pill names only the open tab, under its icon.
+            AnimatedVisibility(
+                visible = selected,
+                enter = fadeIn() + expandVertically(
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()
+                ),
+                exit = fadeOut() + shrinkVertically(
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()
+                ),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Spacer(modifier = Modifier.height(NavLabelGap))
+                    Text(
+                        text = stringResource(destination.labelRes),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The floating bottom pill: one tonal capsule, the open tab expanding to
+ * say its name, the rest as icons. Its items use the same shared specs as
+ * the side bar's, expanding on the horizontal axis instead.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -339,24 +480,14 @@ private fun FloatingNavPill(selectedRoute: String?, onSelect: (String) -> Unit) 
             topLevelDestinations.forEach { destination ->
                 val selected = selectedRoute == destination.route
 
-                val animatedPadding by animateDpAsState(
-                    targetValue = if (selected) 20.dp else 12.dp,
-                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
-                    label = "pillPadding"
+                val animatedPadding = navItemPadding(selected)
+                val animatedContainerColor = navContainerColor(
+                    selected = selected,
+                    activeContainer = MaterialTheme.colorScheme.primaryContainer,
                 )
-                val animatedContainerColor by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                    animationSpec = tween(durationMillis = 200),
-                    label = "pillContainer"
-                )
-                val animatedContentColor by animateColorAsState(
-                    targetValue = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    animationSpec = tween(durationMillis = 200),
-                    label = "pillContent"
+                val animatedContentColor = navContentColor(
+                    selected = selected,
+                    activeContent = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
 
                 Surface(
@@ -378,7 +509,7 @@ private fun FloatingNavPill(selectedRoute: String?, onSelect: (String) -> Unit) 
                         Icon(
                             imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
                             contentDescription = stringResource(destination.labelRes),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(NavIconSize)
                         )
                         // The pill names only the open tab.
                         AnimatedVisibility(
@@ -391,7 +522,7 @@ private fun FloatingNavPill(selectedRoute: String?, onSelect: (String) -> Unit) 
                             ),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(NavLabelGap))
                                 Text(
                                     text = stringResource(destination.labelRes),
                                     style = MaterialTheme.typography.labelLarge,
