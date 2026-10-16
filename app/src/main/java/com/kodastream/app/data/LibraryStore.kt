@@ -61,6 +61,13 @@ object LibraryStore {
     fun toggleWatchlist(context: Context, item: SearchResponse): Boolean =
         toggle(context, WATCHLIST, LibraryItem(item))
 
+    /** The same toggles for entries already in store form (details screen). */
+    fun toggleFavorite(context: Context, item: LibraryItem): Boolean =
+        toggle(context, FAVORITES, item)
+
+    fun toggleWatchlist(context: Context, item: LibraryItem): Boolean =
+        toggle(context, WATCHLIST, item)
+
     /** Drops the entry from both lists, whatever it was in (library swipe-away). */
     fun remove(context: Context, item: LibraryItem) {
         val itemKey = key(item.apiName, item.url)

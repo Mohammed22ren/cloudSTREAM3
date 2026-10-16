@@ -96,4 +96,13 @@
     <string name="about_text">The look comes from the Koda interface. The extension engine comes from CloudStream and is licensed under the GNU GPL v3, so this app is open source under the same license.</string>
     <string name="about_disclaimer">This app contains no content and no providers. It only loads extensions that you choose to install. You are responsible for what you watch.</string>
     <string name="cd_clear_search">Clear search</string>
+    <string name="nav_library">Library</string>
+    <string name="library_favorites">Favorites</string>
+    <string name="library_watchlist">Watchlist</string>
+    <string name="library_empty_title">Nothing saved yet</string>
+    <string name="library_empty_hint_favorites">Tap the heart on a title's page to keep it here.</string>
+    <string name="library_empty_hint_watchlist">Tap the bookmark on a title's page to plan watching it.</string>
+    <string name="library_filter_hint">Filter your library</string>
+    <string name="cd_add_favorites">Save to favorites</string>
+    <string name="cd_add_watchlist">Save to watchlist</string>
 </resources>

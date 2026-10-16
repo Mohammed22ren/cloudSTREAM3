@@ -96,4 +96,13 @@
     <string name="about_text">الشكل مأخوذ من واجهة كودا، ومحرك الإضافات مأخوذ من كلاودستريم وهو مرخّص بموجب GNU GPL v3، لذلك هذا التطبيق مفتوح المصدر بالترخيص نفسه.</string>
     <string name="about_disclaimer">لا يحتوي هذا التطبيق على أي محتوى ولا أي مزوّد. هو يحمّل فقط الإضافات التي تختار تثبيتها، وأنت المسؤول عمّا تشاهده.</string>
     <string name="cd_clear_search">مسح البحث</string>
+    <string name="nav_library">المكتبة</string>
+    <string name="library_favorites">المفضلة</string>
+    <string name="library_watchlist">قائمة المشاهدة</string>
+    <string name="library_empty_title">لا يوجد شيء محفوظ بعد</string>
+    <string name="library_empty_hint_favorites">اضغط على القلب في صفحة أي عنوان ليبقى هنا.</string>
+    <string name="library_empty_hint_watchlist">اضغط على العلامة في صفحة أي عنوان لتخطط لمشاهدته.</string>
+    <string name="library_filter_hint">تصفية مكتبتك</string>
+    <string name="cd_add_favorites">حفظ في المفضلة</string>
+    <string name="cd_add_watchlist">حفظ في قائمة المشاهدة</string>
 </resources>

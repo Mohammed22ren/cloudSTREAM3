@@ -23,12 +23,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkBorder
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +61,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
 import com.kodastream.app.data.DetailsArgs
+import com.kodastream.app.data.LibraryStore
+import com.kodastream.app.data.LibraryStore.LibraryItem
 import com.kodastream.app.data.PlayerArgs
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
@@ -58,6 +71,7 @@ import com.kodastream.app.ui.components.LoadingBox
 import com.kodastream.app.ui.components.PosterCard
 import com.kodastream.app.ui.components.RemoteImage
 import com.kodastream.app.ui.components.SectionHeader
+import com.kodastream.app.ui.components.bouncySpring
 import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.Episode
@@ -163,6 +177,76 @@ private fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Favorites and watchlist, one tap each. The state is read back from the
+ * store on every revision bump rather than kept locally, so every entry
+ * point (this row, the library, another screen) always agrees.
+ */
+@Composable
+private fun LibraryToggles(response: LoadResponse) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val revision by LibraryStore.revision.collectAsState()
+
+    val item = remember(response) {
+        LibraryItem(
+            apiName = response.apiName,
+            url = response.url,
+            name = response.name,
+            posterUrl = response.posterUrl,
+            posterHeaders = response.posterHeaders,
+        )
+    }
+    val isFavorite = remember(revision) {
+        LibraryStore.isFavorite(context, item.apiName, item.url)
+    }
+    val isWatchlisted = remember(revision) {
+        LibraryStore.isWatchlisted(context, item.apiName, item.url)
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ToggleIconButton(
+            filledIcon = Icons.Rounded.Favorite,
+            outlinedIcon = Icons.Rounded.FavoriteBorder,
+            active = isFavorite,
+            label = stringResource(R.string.cd_add_favorites),
+            onToggle = { LibraryStore.toggleFavorite(context, item) },
+        )
+        ToggleIconButton(
+            filledIcon = Icons.Rounded.Bookmark,
+            outlinedIcon = Icons.Rounded.BookmarkBorder,
+            active = isWatchlisted,
+            label = stringResource(R.string.cd_add_watchlist),
+            onToggle = { LibraryStore.toggleWatchlist(context, item) },
+        )
+    }
+}
+
+/** A toggle button whose icon springs between its filled and outlined form. */
+@Composable
+private fun ToggleIconButton(
+    filledIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    outlinedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    active: Boolean,
+    label: String,
+    onToggle: () -> Unit,
+) {
+    FilledTonalIconButton(onClick = onToggle) {
+        AnimatedContent(
+            targetState = active,
+            transitionSpec = {
+                (scaleIn(bouncySpring()) + fadeIn()).togetherWith(scaleOut() + fadeOut())
+            },
+            label = "libraryToggle",
+        ) { filled ->
+            Icon(
+                imageVector = if (filled) filledIcon else outlinedIcon,
+                contentDescription = label,
+                tint = if (filled) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+            )
+        }
+    }
+}
+
 @Composable
 private fun DetailsContent(
     response: LoadResponse,
@@ -246,6 +330,8 @@ private fun DetailsContent(
         item(key = "meta") {
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetaLine(response)
+
+                LibraryToggles(response = response)
 
                 if (directData != null) {
                     Button(

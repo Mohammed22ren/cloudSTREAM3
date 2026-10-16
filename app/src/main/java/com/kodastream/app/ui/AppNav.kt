@@ -1,24 +1,59 @@
 package com.kodastream.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -34,10 +69,12 @@ import com.kodastream.app.R
 import com.kodastream.app.data.AppEvents
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.NavArgs
+import com.kodastream.app.ui.components.softSpring
 import com.kodastream.app.ui.details.DetailsScreen
 import com.kodastream.app.ui.details.DetailsViewModel
 import com.kodastream.app.ui.extensions.ExtensionsScreen
 import com.kodastream.app.ui.home.HomeScreen
+import com.kodastream.app.ui.library.LibraryScreen
 import com.kodastream.app.ui.player.PlayerScreen
 import com.kodastream.app.ui.player.PlayerViewModel
 import com.kodastream.app.ui.search.SearchScreen
@@ -48,19 +85,26 @@ import com.lagradost.cloudstream3.SearchResponse
 private object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
+    const val LIBRARY = "library"
     const val EXTENSIONS = "extensions"
     const val SETTINGS = "settings"
     const val DETAILS = "details/{id}"
     const val PLAYER = "player/{id}"
 }
 
-private data class TopLevel(val route: String, val labelRes: Int, val icon: ImageVector)
+private data class TopLevel(
+    val route: String,
+    val labelRes: Int,
+    val filledIcon: ImageVector,
+    val outlinedIcon: ImageVector,
+)
 
 private val topLevelDestinations = listOf(
-    TopLevel(Routes.HOME, R.string.nav_home, Icons.Rounded.Home),
-    TopLevel(Routes.SEARCH, R.string.nav_search, Icons.Rounded.Search),
-    TopLevel(Routes.EXTENSIONS, R.string.nav_extensions, Icons.Rounded.Extension),
-    TopLevel(Routes.SETTINGS, R.string.nav_settings, Icons.Rounded.Settings),
+    TopLevel(Routes.HOME, R.string.nav_home, Icons.Rounded.Home, Icons.Outlined.Home),
+    TopLevel(Routes.SEARCH, R.string.nav_search, Icons.Rounded.Search, Icons.Outlined.Search),
+    TopLevel(Routes.LIBRARY, R.string.nav_library, Icons.Rounded.VideoLibrary, Icons.Outlined.VideoLibrary),
+    TopLevel(Routes.EXTENSIONS, R.string.nav_extensions, Icons.Rounded.Extension, Icons.Outlined.Extension),
+    TopLevel(Routes.SETTINGS, R.string.nav_settings, Icons.Rounded.Settings, Icons.Outlined.Settings),
 )
 
 private fun NavHostController.navigateTopLevel(route: String) {
@@ -71,8 +115,12 @@ private fun NavHostController.navigateTopLevel(route: String) {
     }
 }
 
+private fun NavHostController.openDetails(args: DetailsArgs) {
+    navigate("details/${NavArgs.put(args)}")
+}
+
 private fun NavHostController.openDetails(item: SearchResponse) {
-    val id = NavArgs.put(
+    openDetails(
         DetailsArgs(
             apiName = item.apiName,
             url = item.url,
@@ -81,7 +129,6 @@ private fun NavHostController.openDetails(item: SearchResponse) {
             posterHeaders = item.posterHeaders,
         )
     )
-    navigate("details/$id")
 }
 
 @Composable
@@ -97,23 +144,18 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
         if (pendingRepo != null) navController.navigateTopLevel(Routes.EXTENSIONS)
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            if (showBar) {
-                NavigationBar {
-                    topLevelDestinations.forEach { destination ->
-                        NavigationBarItem(
-                            selected = route == destination.route,
-                            onClick = { navController.navigateTopLevel(destination.route) },
-                            icon = { Icon(destination.icon, contentDescription = null) },
-                            label = { Text(stringResource(destination.labelRes)) },
-                        )
-                    }
-                }
-            }
-        },
-    ) { innerPadding ->
+    // The pill floats over the content rather than reserving a Scaffold slot,
+    // so what the old Scaffold handed down as inner padding is assembled
+    // here: system-bar insets top and bottom, plus the pill's own strip.
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val contentPadding = if (showBar) {
+        PaddingValues(top = topInset, bottom = 84.dp + navInset)
+    } else {
+        PaddingValues(0.dp)
+    }
+
+    Box(Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
@@ -121,22 +163,28 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    contentPadding = innerPadding,
+                    contentPadding = contentPadding,
                     onOpenItem = navController::openDetails,
                     onOpenExtensions = { navController.navigateTopLevel(Routes.EXTENSIONS) },
                 )
             }
             composable(Routes.SEARCH) {
                 SearchScreen(
-                    contentPadding = innerPadding,
+                    contentPadding = contentPadding,
+                    onOpenItem = navController::openDetails,
+                )
+            }
+            composable(Routes.LIBRARY) {
+                LibraryScreen(
+                    contentPadding = contentPadding,
                     onOpenItem = navController::openDetails,
                 )
             }
             composable(Routes.EXTENSIONS) {
-                ExtensionsScreen(contentPadding = innerPadding)
+                ExtensionsScreen(contentPadding = contentPadding)
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(contentPadding = innerPadding, themeViewModel = themeViewModel)
+                SettingsScreen(contentPadding = contentPadding, themeViewModel = themeViewModel)
             }
             composable(
                 route = Routes.DETAILS,
@@ -178,5 +226,99 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
                 }
             }
         }
+
+        AnimatedVisibility(
+            visible = showBar,
+            enter = fadeIn(tween(220)) +
+                slideInVertically(animationSpec = softSpring()) { it * 2 },
+            exit = fadeOut(tween(180)) +
+                slideOutVertically(animationSpec = softSpring()) { it * 2 },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            FloatingNavPill(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
+        }
     }
+}
+
+/**
+ * The floating navigation pill: one tonal capsule, the open tab expanding to
+ * say its name, the rest as icons. Ported from Koda's home pill, with the
+ * tab set replaced by KodaStream's routes.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun FloatingNavPill(selectedRoute: String?, onSelect: (String) -> Unit) {
+    HorizontalFloatingToolbar(
+        expanded = true,
+        modifier = Modifier
+            .navigationBarsPadding()
+            .padding(bottom = 20.dp),
+        content = {
+            topLevelDestinations.forEach { destination ->
+                val selected = selectedRoute == destination.route
+
+                val animatedPadding by animateDpAsState(
+                    targetValue = if (selected) 20.dp else 12.dp,
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+                    label = "pillPadding"
+                )
+                val animatedContainerColor by animateColorAsState(
+                    targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    animationSpec = tween(durationMillis = 200),
+                    label = "pillContainer"
+                )
+                val animatedContentColor by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    animationSpec = tween(durationMillis = 200),
+                    label = "pillContent"
+                )
+
+                Surface(
+                    onClick = { onSelect(destination.route) },
+                    shape = CircleShape,
+                    color = animatedContainerColor,
+                    contentColor = animatedContentColor,
+                    modifier = Modifier.height(48.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = animatedPadding)
+                            .animateContentSize(
+                                animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()
+                            ),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = if (selected) destination.filledIcon else destination.outlinedIcon,
+                            contentDescription = stringResource(destination.labelRes),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        // The pill names only the open tab.
+                        AnimatedVisibility(
+                            visible = selected,
+                            enter = fadeIn() + expandHorizontally(
+                                animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()
+                            ),
+                            exit = fadeOut() + shrinkHorizontally(
+                                animationSpec = MaterialTheme.motionScheme.fastSpatialSpec()
+                            ),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(destination.labelRes),
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
 }
