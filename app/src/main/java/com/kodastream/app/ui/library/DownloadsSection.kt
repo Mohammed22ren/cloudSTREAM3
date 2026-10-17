@@ -164,6 +164,9 @@ fun DownloadsSection(
             confirmButton = {
                 TextButton(onClick = {
                     DownloadLocations.delete(context, download.fileUri)
+                    // Its subtitle goes with the episode; the poster is
+                    // internal and follows too.
+                    DownloadLocations.delete(context, download.subtitleUri)
                     DownloadLocations.delete(context, download.posterUri)
                     DownloadStore.remove(context, download.id)
                     // The title folder goes when its last file does.
@@ -196,7 +199,7 @@ fun DownloadsSection(
                     DownloadLocations.deleteTitleFolder(
                         context,
                         titleRecords.first().folderUri,
-                        titleRecords.mapNotNull { it.fileUri }.toSet(),
+                        titleRecords.flatMap { listOfNotNull(it.fileUri, it.subtitleUri) }.toSet(),
                     )
                     pendingDeleteTitle = null
                 }) {
@@ -228,7 +231,7 @@ fun DownloadsSection(
                     records.mapNotNull { it.folderUri }.distinct().forEach { folder ->
                         DownloadLocations.deleteTitleFolder(
                             context, folder,
-                            records.mapNotNull { it.fileUri }.toSet(),
+                            records.flatMap { listOfNotNull(it.fileUri, it.subtitleUri) }.toSet(),
                         )
                     }
                     DownloadStore.clear(context)

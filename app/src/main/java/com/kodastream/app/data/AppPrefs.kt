@@ -17,7 +17,7 @@ object AppPrefs {
     private const val KEY_DL_TREE = "download_tree_uri"
     private const val KEY_DL_WIFI = "download_wifi_only"
     private const val KEY_DL_MAX = "download_max_concurrent"
-    private const val KEY_DL_QUALITY = "download_last_quality"
+    private const val KEY_DL_SERVER = "download_last_server"
     private const val KEY_DL_FOLDERS_DONE = "download_folders_migrated"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val POSITION_PREFIX = "pos_"
@@ -91,11 +91,11 @@ object AppPrefs {
         prefs(context).edit { putBoolean(KEY_KEEP_SCREEN_ON, value) }
     }
 
-    /** The quality last picked in the download sheet, preselected next time. */
-    fun lastDownloadQuality(context: Context): Int = prefs(context).getInt(KEY_DL_QUALITY, -1)
+    /** The server name last picked in the download card, preselected next time. */
+    fun lastDownloadServer(context: Context): String? = prefs(context).getString(KEY_DL_SERVER, null)
 
-    fun setLastDownloadQuality(context: Context, value: Int) {
-        prefs(context).edit { putInt(KEY_DL_QUALITY, value) }
+    fun setLastDownloadServer(context: Context, value: String) {
+        prefs(context).edit { putString(KEY_DL_SERVER, value) }
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

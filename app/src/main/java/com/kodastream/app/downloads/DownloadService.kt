@@ -484,7 +484,14 @@ class DownloadService : Service() {
                 "ttml" -> "application/ttml+xml"
                 else -> "text/vtt"
             }
-            val subName = record.fileName.substringBeforeLast('.') + "." + safeExt
+            // "<video base>.<language>.<ext>", next to its video.
+            val langSuffix = record.subLang
+                ?.replace(Regex("[^A-Za-z0-9]"), "")
+                ?.lowercase()
+                ?.take(8)
+                ?.ifBlank { null }
+                ?: "sub"
+            val subName = record.fileName.substringBeforeLast('.') + "." + langSuffix + "." + safeExt
             val folder = record.folderUri ?: DownloadLocations.resolveFolder(this, record) ?: return
 
             val uri: String? = if (folder.startsWith("content://")) {

@@ -197,4 +197,14 @@
     <string name="cd_expand">توسيع</string>
     <string name="cd_collapse">طوي</string>
     <string name="downloads_migrated">تم تنظيم %d من التنزيلات في مجلدات</string>
+    <string name="download_options_title">خيارات التنزيل</string>
+    <string name="loading_servers">جارٍ تحميل السيرفرات…</string>
+    <string name="download_load_failed">تعذّر تحميل السيرفرات</string>
+    <string name="download_no_subtitle">بدون ترجمة</string>
+    <string name="download_subtitle_line">الترجمة: %s</string>
+    <string name="added_to_downloads">تمت الإضافة إلى التنزيلات</string>
+    <string name="view">عرض</string>
+    <string name="dl_file_mp4">MP4</string>
+    <string name="dl_file_hls">HLS</string>
+    <string name="download_season_fallback">تمت إضافة %1$d حلقة، استخدمت %2$d منها بديلًا</string>
 </resources>

@@ -197,4 +197,14 @@
     <string name="cd_expand">Expand</string>
     <string name="cd_collapse">Collapse</string>
     <string name="downloads_migrated">Organized %d downloads into folders</string>
+    <string name="download_options_title">Download options</string>
+    <string name="loading_servers">Loading servers…</string>
+    <string name="download_load_failed">Couldn't load servers</string>
+    <string name="download_no_subtitle">No subtitles</string>
+    <string name="download_subtitle_line">Subtitle: %s</string>
+    <string name="added_to_downloads">Added to downloads</string>
+    <string name="view">View</string>
+    <string name="dl_file_mp4">MP4</string>
+    <string name="dl_file_hls">HLS</string>
+    <string name="download_season_fallback">Queued %1$d episodes, %2$d used a fallback</string>
 </resources>

@@ -348,6 +348,7 @@ private fun AppNavGraph(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                     onOpenItem = navController::openDetails,
+                    onOpenDownloads = { navController.navigateTopLevel(Routes.LIBRARY) },
                     onPlay = { playerArgs ->
                         navController.navigate("player/${NavArgs.put(playerArgs)}")
                     },

@@ -60,10 +60,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -88,6 +89,7 @@ import androidx.core.text.HtmlCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
+import com.kodastream.app.data.AppEvents
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.DownloadStore
@@ -180,6 +182,7 @@ fun DetailsScreen(
     onBack: () -> Unit,
     onOpenItem: (SearchResponse) -> Unit,
     onPlay: (PlayerArgs) -> Unit,
+    onOpenDownloads: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     val args = viewModel.args
@@ -372,8 +375,8 @@ private fun DetailsContent(
         DownloadStore.entries.collect { updated -> updated?.let { downloads = it } }
     }
     val scope = rememberCoroutineScope()
-    var qualityLinks by remember { mutableStateOf<List<ExtractorLink>?>(null) }
-    var qualityPicked by remember { mutableStateOf<((ExtractorLink) -> Unit)?>(null) }
+    var downloadSheet by remember { mutableStateOf<DownloadTarget?>(null) }
+    val snackbar = remember { SnackbarHostState() }
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     fun ensureNotifPermission() {
@@ -392,7 +395,6 @@ private fun DetailsContent(
         subtitles: List<SubtitleFile> = emptyList(),
     ) {
         ensureNotifPermission()
-        if (link.quality != Qualities.Unknown.value) AppPrefs.setLastDownloadQuality(context, link.quality)
         val isHls = link.type == ExtractorLinkType.M3U8
         val sanitize: (String) -> String = { s: String ->
             s.replace(Regex("[\\/:*?\"<>|]"), "").trim().take(100)
@@ -436,33 +438,67 @@ private fun DetailsContent(
         if (queued) DownloadService.ensure(context)
     }
 
-    fun requestDownload(data: String, season: Int?, episode: Int?, episodeTitle: String?) {
+    fun downloadOf(id: String): Download? = downloads.firstOrNull { it.id == id }
+
+    /** "Download added" with a way to jump straight to the Downloads tab. */
+    fun announceDownload(count: Int, fallbacks: Int) {
         scope.launch {
-            val api = Engine.provider(response.apiName) ?: return@launch
-            val links = mutableListOf<ExtractorLink>()
-            val subs = mutableListOf<SubtitleFile>()
-            Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
-                api.loadLinks(data, false, { subs.add(it) }, { links.add(it) })
-            }
-            val usable = links
-                .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
-                .sortedByDescending { it.quality }
-            when {
-                usable.isEmpty() -> Toast.makeText(
-                    context, context.getString(R.string.download_no_sources), Toast.LENGTH_SHORT,
-                ).show()
-
-                usable.size == 1 -> startDownload(usable.first(), season, episode, episodeTitle, subs)
-
-                else -> {
-                    qualityLinks = usable
-                    qualityPicked = { startDownload(it, season, episode, episodeTitle, subs) }
-                }
+            val result = snackbar.showSnackbar(
+                message = if (fallbacks > 0) {
+                    context.getString(R.string.download_season_fallback, count, fallbacks)
+                } else {
+                    context.getString(R.string.added_to_downloads)
+                },
+                actionLabel = context.getString(R.string.view),
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                AppEvents.pendingLibrarySection.value = "DOWNLOADS"
+                onOpenDownloads()
             }
         }
     }
 
-    fun downloadOf(id: String): Download? = downloads.firstOrNull { it.id == id }
+    /** Season mode: apply the preferred server and language to every episode. */
+    fun downloadSeason(episodes: List<Episode>, preferredServer: String, preferredSubLang: String?) {
+        scope.launch {
+            val api = Engine.provider(response.apiName) ?: return@launch
+            var queued = 0
+            var fallbacks = 0
+            for ((index, episode) in episodes.withIndex()) {
+                val season = episode.season ?: selectedSeason
+                val number = episode.episode ?: index + 1
+                val id = DownloadStore.idOf(response.apiName, response.url, season, number)
+                if (downloads.any { it.id == id && it.state == DownloadStore.STATE_DONE }) continue
+                val links = mutableListOf<ExtractorLink>()
+                val subs = mutableListOf<SubtitleFile>()
+                Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
+                    api.loadLinks(episode.data, false, { subs.add(it) }, { links.add(it) })
+                }
+                val usable = links
+                    .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
+                val chosen = usable.firstOrNull { it.name.equals(preferredServer, ignoreCase = true) }
+                    ?: usable.maxByOrNull { it.quality }
+                    ?: continue
+                if (!chosen.name.equals(preferredServer, ignoreCase = true)) fallbacks++
+                val sub = if (preferredSubLang == null) {
+                    null
+                } else {
+                    subs.firstOrNull { candidate ->
+                        candidate.lang.equals(preferredSubLang, ignoreCase = true) ||
+                            candidate.langTag?.startsWith(preferredSubLang, ignoreCase = true) == true
+                    }
+                }
+                if (preferredSubLang != null && sub == null) fallbacks++
+                startDownload(
+                    chosen, season, number, episode.name,
+                    sub?.let { listOf(it) } ?: emptyList(),
+                )
+                queued++
+            }
+            if (queued > 0) announceDownload(queued, fallbacks)
+        }
+    }
 
 
     fun play(data: String, subtitle: String?, episode: Episode? = null) {
@@ -497,6 +533,7 @@ private fun DetailsContent(
         )
     }
 
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -575,7 +612,7 @@ private fun DetailsContent(
                         }
                         val movieDownload = downloadOf(DownloadStore.idOf(response.apiName, response.url, null, null))
                         DownloadStateIcon(download = movieDownload, onDownload = {
-                            requestDownload(directData, null, null, null)
+                            downloadSheet = DownloadTarget.Single(directData, null, null, null)
                         })
                     }
                 }
@@ -720,37 +757,7 @@ private fun DetailsContent(
                                 text = { Text(stringResource(R.string.download_season)) },
                                 onClick = {
                                     menuOpen = false
-                                    scope.launch {
-                                        val api = Engine.provider(response.apiName) ?: return@launch
-                                        var queuedCount = 0
-                                        for ((i, ep) in visibleEpisodes.withIndex()) {
-                                            val id = DownloadStore.idOf(
-                                                response.apiName, response.url,
-                                                ep.season ?: selectedSeason, ep.episode ?: i + 1,
-                                            )
-                                            if (downloads.any { it.id == id && it.state == DownloadStore.STATE_DONE }) continue
-                                            val links = mutableListOf<ExtractorLink>()
-                                            val subs = mutableListOf<SubtitleFile>()
-                                            Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
-                                                api.loadLinks(ep.data, false, { subs.add(it) }, { links.add(it) })
-                                            }
-                                            val best = links
-                                                .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
-                                                .maxByOrNull { it.quality }
-                                                ?: continue
-                                            startDownload(
-                                                best, ep.season ?: selectedSeason, ep.episode ?: i + 1, ep.name, subs,
-                                            )
-                                            queuedCount++
-                                        }
-                                        if (queuedCount > 0) {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.download_queued_episodes, queuedCount),
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
-                                        }
-                                    }
+                                    downloadSheet = DownloadTarget.Season(visibleEpisodes.toList())
                                 },
                             )
                             DropdownMenuItem(
@@ -802,7 +809,7 @@ private fun DetailsContent(
                     },
                     onDownload = {
                         when (episodeDownload?.state) {
-                            null -> requestDownload(
+                            null -> downloadSheet = DownloadTarget.Single(
                                 episode.data,
                                 episode.season ?: selectedSeason,
                                 episode.episode ?: index + 1,
@@ -840,67 +847,37 @@ private fun DetailsContent(
         item(key = "bottom-space") { Spacer(Modifier.navigationBarsPadding()) }
     }
 
-    qualityLinks?.let { links ->
-        QualitySheet(
-            links = links,
-            onPick = { link ->
-                qualityPicked?.invoke(link)
-                qualityLinks = null
-                qualityPicked = null
-            },
-            onDismiss = {
-                qualityLinks = null
-                qualityPicked = null
-            },
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
-}
 
-/** The quality/server picker for downloads, preselecting the last chosen quality. */
-@Composable
-private fun QualitySheet(
-    links: List<ExtractorLink>,
-    onPick: (ExtractorLink) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val context = LocalContext.current
-    val lastQuality = remember { AppPrefs.lastDownloadQuality(context) }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding(),
-        ) {
-            Text(
-                text = stringResource(R.string.download_pick_quality),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-            )
-            links.forEach { link ->
-                val quality = Qualities.getStringByInt(link.quality)
-                val label = if (quality.isBlank()) link.name else "${link.name}  $quality"
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(link) }
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = link.quality == lastQuality, onClick = null)
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+    downloadSheet?.let { sheetTarget ->
+        DownloadOptionsSheet(
+            apiName = response.apiName,
+            target = sheetTarget,
+            onConfirm = { link, subtitle ->
+                if (sheetTarget is DownloadTarget.Single) {
+                    startDownload(
+                        link,
+                        sheetTarget.season,
+                        sheetTarget.episode,
+                        sheetTarget.episodeTitle,
+                        subtitle?.let { listOf(it) } ?: emptyList(),
                     )
+                    announceDownload(1, 0)
                 }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
+                downloadSheet = null
+            },
+            onConfirmSeason = { serverName, subLang ->
+                downloadSheet = null
+                if (sheetTarget is DownloadTarget.Season) {
+                    downloadSeason(sheetTarget.episodes, serverName, subLang)
+                }
+            },
+            onDismiss = { downloadSheet = null },
+        )
     }
 }
 

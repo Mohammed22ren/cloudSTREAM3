@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
+import com.kodastream.app.data.AppEvents
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.LibraryStore
 import com.kodastream.app.data.LibraryStore.LibraryItem
@@ -83,6 +84,16 @@ fun LibraryScreen(
     val favorites by viewModel.favorites.collectAsState()
     val watchlist by viewModel.watchlist.collectAsState()
     var section by rememberSaveable { mutableStateOf(LibrarySection.FAVORITES) }
+
+    // "View" from a download snackbar lands here, on the Downloads tab.
+    LaunchedEffect(Unit) {
+        AppEvents.pendingLibrarySection.collect { pending ->
+            if (pending != null) {
+                section = LibrarySection.entries.firstOrNull { it.name == pending } ?: section
+                AppEvents.pendingLibrarySection.value = null
+            }
+        }
+    }
     var filter by remember { mutableStateOf("") }
 
     val all = if (section == LibrarySection.FAVORITES) favorites else watchlist
