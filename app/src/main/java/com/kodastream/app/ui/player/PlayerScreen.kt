@@ -11,6 +11,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -48,6 +51,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -587,6 +591,42 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
+
+
+    var historyRecorded by remember { mutableStateOf(false) }
+    var watchedMarked by remember { mutableStateOf(false) }
+
+    /** The resume key of whichever episode is on screen right now. */
+    fun currentResumeKey(): String =
+        viewModel.currentHistory.value?.resumeKey ?: viewModel.args.resumeKey
+
+    /**
+     * Moves to another episode in the queue. Saves the current progress
+     * (with the 90% watched rule), prefers the local file when the target is
+     * downloaded, and ignores taps while a switch is already loading.
+     */
+    fun switchEpisode(index: Int) {
+        val q = queue ?: return
+        if (switching) return
+        if (index !in q.episodes.indices) return
+        recordHistory()
+        historyRecorded = false
+        watchedMarked = false
+        pendingSwitchResume = true
+        val target = q.episodes[index]
+        val download = downloads.firstOrNull {
+            it.apiName == q.apiName && it.url == q.url &&
+                it.season == target.season && it.episode == target.number &&
+                it.state == DownloadStore.STATE_DONE && it.fileUri != null
+        }
+        viewModel.switchTo(index, download?.fileUri, download?.subtitleUri)
+        panelOpen = false
+    }
+
+    fun switchBy(offset: Int) {
+        switchEpisode(currentIndex + offset)
+    }
+
     // A series walks between episodes through the same transport controls
     // the player already shows: the prev/next buttons appear when a queue
     // exists, and end-of-queue taps simply do nothing.
@@ -629,39 +669,6 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         }
     }
 
-    var historyRecorded by remember { mutableStateOf(false) }
-    var watchedMarked by remember { mutableStateOf(false) }
-
-    /** The resume key of whichever episode is on screen right now. */
-    fun currentResumeKey(): String =
-        viewModel.currentHistory.value?.resumeKey ?: viewModel.args.resumeKey
-
-    /**
-     * Moves to another episode in the queue. Saves the current progress
-     * (with the 90% watched rule), prefers the local file when the target is
-     * downloaded, and ignores taps while a switch is already loading.
-     */
-    fun switchEpisode(index: Int) {
-        val q = queue ?: return
-        if (switching) return
-        if (index !in q.episodes.indices) return
-        recordHistory()
-        historyRecorded = false
-        watchedMarked = false
-        pendingSwitchResume = true
-        val target = q.episodes[index]
-        val download = downloads.firstOrNull {
-            it.apiName == q.apiName && it.url == q.url &&
-                it.season == target.season && it.episode == target.number &&
-                it.state == DownloadStore.STATE_DONE && it.fileUri != null
-        }
-        viewModel.switchTo(index, download?.fileUri, download?.subtitleUri)
-        panelOpen = false
-    }
-
-    fun switchBy(offset: Int) {
-        switchEpisode(currentIndex + offset)
-    }
 
     /**
      * Feeds the watch history: the first call past the 5-second mark creates
