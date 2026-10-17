@@ -207,4 +207,7 @@
     <string name="dl_file_mp4">MP4</string>
     <string name="dl_file_hls">HLS</string>
     <string name="download_season_fallback">تمت إضافة %1$d حلقة، استخدمت %2$d منها بديلًا</string>
+    <string name="now_playing">قيد التشغيل</string>
+    <string name="player_loading_episode">جارٍ تحميل الحلقة…</string>
+    <string name="player_switch_failed">تعذّر تحميل الحلقة</string>
 </resources>

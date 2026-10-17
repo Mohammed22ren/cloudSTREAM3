@@ -73,6 +73,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.app.Application
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -364,7 +366,11 @@ private fun AppNavGraph(
                 LaunchedEffect(Unit) { navController.popBackStack() }
             } else {
                 val viewModel: PlayerViewModel = viewModel(
-                    factory = viewModelFactory { initializer { PlayerViewModel(args) } }
+                    factory = viewModelFactory {
+                        initializer {
+                            PlayerViewModel(this[APPLICATION_KEY]!!, args)
+                        }
+                    }
                 )
                 PlayerScreen(
                     viewModel = viewModel,

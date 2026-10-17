@@ -94,6 +94,8 @@ import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.DownloadStore
 import com.kodastream.app.data.DownloadStore.Download
+import com.kodastream.app.data.EpisodeQueue
+import com.kodastream.app.data.EpisodeQueues
 import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.HistoryStore.HistoryEntry
 import com.kodastream.app.data.LibraryStore
@@ -515,6 +517,25 @@ private fun DetailsContent(
 
     fun play(data: String, subtitle: String?, episode: Episode? = null) {
         val resumeKey = response.apiName + "|" + data
+        // Episodes carry the whole series with them so the player can walk
+        // between episodes without loading anything again.
+        val queue = if (episode != null || season != null) {
+            EpisodeQueues.build(
+                apiName = response.apiName,
+                url = response.url,
+                title = title,
+                posterUrl = response.posterUrl,
+                posterHeaders = response.posterHeaders,
+                type = when (response) {
+                    is AnimeLoadResponse -> "anime"
+                    is TvSeriesLoadResponse -> "series"
+                    else -> "movie"
+                },
+                episodes = allEpisodes,
+            )
+        } else {
+            null
+        }
         onPlay(
             PlayerArgs(
                 apiName = response.apiName,
@@ -522,6 +543,7 @@ private fun DetailsContent(
                 title = title,
                 subtitle = subtitle,
                 resumeKey = resumeKey,
+                queue = queue,
                 history = HistoryEntry(
                     key = response.apiName + "|" + response.url,
                     apiName = response.apiName,

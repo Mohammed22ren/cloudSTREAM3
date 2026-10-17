@@ -11,6 +11,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,6 +52,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,9 +76,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -94,14 +98,20 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
+import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.data.EpisodeQueue
+import com.kodastream.app.data.EpisodeQueues
 import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.PlayerArgs
+import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.data.EpisodeQueue
 import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.data.SubtitleStyleStore
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
 import com.kodastream.app.ui.components.ErrorBox
 import com.kodastream.app.ui.components.LoadingBox
+import com.kodastream.app.ui.components.softSpring
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getActivity
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SubtitleFile
@@ -119,7 +129,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
+class PlayerViewModel(app: Application, val args: PlayerArgs) : AndroidViewModel(app) {
     val api: MainAPI? = Engine.provider(args.apiName)
 
     private val _links = MutableStateFlow<List<ExtractorLink>>(emptyList())
@@ -142,12 +152,44 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    // ---- the episode walkway ----
+
+    /** The flat episode list, whichever way it was obtained. */
+    private val _queue = MutableStateFlow<EpisodeQueue?>(args.queue)
+    val queue: StateFlow<EpisodeQueue?> = _queue.asStateFlow()
+
+    /** Where the current episode sits in the queue, -1 when unknown. */
+    private val _currentIndex = MutableStateFlow(-1)
+    val currentIndex: StateFlow<Int> = _currentIndex.asStateFlow()
+
+    /** The history entry of the episode being played - the single source of truth. */
+    private val _currentHistory = MutableStateFlow(args.history)
+    val currentHistory: StateFlow<HistoryStore.HistoryEntry?> = _currentHistory.asStateFlow()
+
+    /** True while an episode switch is loading. */
+    private val _switching = MutableStateFlow(false)
+    val switching: StateFlow<Boolean> = _switching.asStateFlow()
+
+    /** Set when a switch failed; the previous episode keeps playing. */
+    private val _switchError = MutableStateFlow<String?>(null)
+    val switchError: StateFlow<String?> = _switchError.asStateFlow()
+
+    /** The data string of the episode being played (episode switches change it). */
+    private var currentData = args.data
+
+    /** The server name the user last picked; the next episode prefers it. */
+    private var preferredLinkName: String? = null
+
+    /** The subtitle language the user last picked; switches keep the language. */
+    private var preferredSubLang: String? = null
+    private var autoPickSubOnResolve = false
+    private var switchResolve = false
+
     private val failedUrls = HashSet<String>()
     private var job: Job? = null
 
-    /** True when args.data points at a downloaded file rather than a provider page. */
-    private val isLocalFile: Boolean =
-        args.data.startsWith("content://") || args.data.startsWith("file://")
+    private val isLocalFile: Boolean
+        get() = currentData.startsWith("content://") || currentData.startsWith("file://")
 
     init {
         if (isLocalFile) {
@@ -157,7 +199,7 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
             _selectedLink.value = ExtractorLink(
                 source = "local",
                 name = "Local",
-                url = args.data,
+                url = currentData,
                 referer = "",
                 quality = Qualities.Unknown.value,
                 headers = emptyMap(),
@@ -166,25 +208,47 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
             // A subtitle downloaded beside the video, if the provider had one.
             args.offlineSubtitleUri?.let { subUri ->
                 @Suppress("DEPRECATION")
-                val sub = SubtitleFile(
-                    lang = args.subtitle ?: "Subtitle",
-                    url = subUri,
-                )
+                val sub = SubtitleFile(lang = args.subtitle ?: "Subtitle", url = subUri)
                 _subtitles.value = listOf(sub)
                 _selectedSubtitle.value = sub
             }
         } else {
             resolve()
         }
-    }
 
+        // Where does the current episode sit? Playbacks started from the
+        // details page arrive with their queue attached; ones started from
+        // Downloads or History rebuild it here, falling back to the
+        // downloaded episodes when the network cannot be reached.
+        val attached = args.queue
+        if (attached != null) {
+            matchCurrent(attached)
+        } else {
+            val hist = args.history
+            if (hist != null && (hist.season != null || hist.episode != null)) {
+                viewModelScope.launch {
+                    val api = Engine.provider(hist.apiName)
+                    val result = api?.let {
+                        Engine.guarded(it.loadTimeoutMs) { it.load(hist.url) }
+                    }
+                    val networkQueue = result?.getOrNull()?.let { EpisodeQueues.fromResponse(it) }
+                    if (networkQueue != null) {
+                        _queue.value = networkQueue
+                        matchCurrent(networkQueue)
+                    } else {
+                        offlineQueue(hist)
+                    }
+                }
+            }
+        }
+    }
 
     fun resolve() {
         job?.cancel()
         _links.value = emptyList()
         _subtitles.value = emptyList()
         _selectedLink.value = null
-        _selectedSubtitle.value = null
+        if (!autoPickSubOnResolve) _selectedSubtitle.value = null
         _error.value = null
         failedUrls.clear()
 
@@ -192,22 +256,154 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
             _resolving.value = true
             val provider = api
             if (provider == null) {
-                _error.value = "Provider \"${args.apiName}\" is not loaded"
-                _resolving.value = false
+                failResolve("Provider \"${args.apiName}\" is not loaded")
                 return@launch
             }
             val result = Engine.guarded(provider.loadLinksTimeoutMs ?: 120_000L) {
                 provider.loadLinks(
-                    args.data,
-                    false,
+                    currentData, false,
                     { subtitle -> addSubtitle(subtitle) },
                     { link -> addLink(link) },
                 )
             }
             _resolving.value = false
             if (_links.value.isEmpty()) {
-                _error.value = result.exceptionOrNull()?.readableMessage() ?: ""
+                val message = result.exceptionOrNull()?.readableMessage() ?: ""
+                if (switchResolve) {
+                    // Keep the previous episode alive; the overlay offers Retry.
+                    _switchError.value = message.ifBlank { " " }
+                    _switching.value = false
+                } else {
+                    _error.value = message
+                }
+            } else {
+                switchResolve = false
+                _switching.value = false
+                _switchError.value = null
+                // Switching keeps the subtitle language when the new episode
+                // has it; otherwise the existing no-subtitle default applies.
+                if (autoPickSubOnResolve) {
+                    autoPickSubOnResolve = false
+                    if (_selectedSubtitle.value == null && _subtitles.value.isNotEmpty()) {
+                        val lang = preferredSubLang
+                        _selectedSubtitle.value = if (lang != null) {
+                            _subtitles.value.firstOrNull { sub ->
+                                sub.lang.equals(lang, ignoreCase = true) ||
+                                    sub.langTag?.startsWith(lang, ignoreCase = true) == true
+                            }
+                        } else {
+                            null
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    private fun failResolve(message: String) {
+        _resolving.value = false
+        if (switchResolve) {
+            _switchError.value = message
+            _switching.value = false
+        } else {
+            _error.value = message
+        }
+    }
+
+    /** Moves to another episode of the queue; ignored while one is loading. */
+    fun switchTo(index: Int, dataOverride: String?, subtitleOverride: String?) {
+        val q = queue.value ?: return
+        if (_switching.value) return
+        if (index !in q.episodes.indices) return
+        val episode = q.episodes[index]
+
+        _switching.value = true
+        _switchError.value = null
+        switchResolve = true
+        _currentIndex.value = index
+        _currentHistory.value = args.history?.copy(
+            season = episode.season,
+            episode = episode.number,
+            episodeTitle = episode.name,
+            data = dataOverride ?: episode.data,
+            resumeKey = if (dataOverride != null) {
+                "local|" + DownloadStore.idOf(q.apiName, q.url, episode.season, episode.number)
+            } else {
+                q.apiName + "|" + episode.data
+            },
+        )
+        autoPickSubOnResolve = true
+        currentData = dataOverride ?: episode.data
+        if (isLocalFile) {
+            // A downloaded file plays directly, with its local subtitle and
+            // no network request at all.
+            _resolving.value = false
+            _links.value = emptyList()
+            _selectedLink.value = ExtractorLink(
+                source = "local",
+                name = "Local",
+                url = currentData,
+                referer = "",
+                quality = Qualities.Unknown.value,
+                headers = emptyMap(),
+                type = ExtractorLinkType.VIDEO,
+            )
+            _subtitles.value = emptyList()
+            _selectedSubtitle.value = subtitleOverride?.let { uri ->
+                @Suppress("DEPRECATION")
+                SubtitleFile(lang = "Subtitle", url = uri)
+            }
+            switchResolve = false
+            _switching.value = false
+            _switchError.value = null
+        } else {
+            resolve()
+        }
+    }
+
+    /** Dismiss a failed switch and keep watching the current episode. */
+    fun clearSwitchError() {
+        _switchError.value = null
+        _switching.value = false
+        switchResolve = false
+    }
+
+    /** Retry after a failed switch; the previous episode kept playing meanwhile. */
+    fun retrySwitch() {
+        if (_switchError.value == null || isLocalFile) return
+        _switchError.value = null
+        switchResolve = true
+        _switching.value = true
+        resolve()
+    }
+
+    /** Where the current episode sits in the queue. */
+    private fun matchCurrent(q: EpisodeQueue) {
+        val hist = args.history
+        var index = -1
+        if (hist != null && hist.season != null) {
+            index = q.episodes.indexOfFirst { it.season == hist.season && it.number == hist.episode }
+        }
+        if (index < 0) {
+            index = q.episodes.indexOfFirst { it.data == currentData }
+        }
+        _currentIndex.value = index
+    }
+
+    /** The offline fallback: the downloaded episodes of this title. */
+    private fun offlineQueue(hist: HistoryStore.HistoryEntry) {
+        val queue = EpisodeQueues.fromDownloads(
+            apiName = hist.apiName,
+            url = hist.url,
+            title = hist.title,
+            posterUrl = hist.posterUrl,
+            posterHeaders = hist.posterHeaders,
+            type = hist.type,
+            downloads = DownloadStore.current(getApplication()),
+        )
+        if (queue != null) {
+            _queue.value = queue
+            matchCurrent(queue)
         }
     }
 
@@ -216,18 +412,26 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
         // Torrents and magnets need a torrent engine, which this app does not have.
         if (link.type == ExtractorLinkType.TORRENT || link.type == ExtractorLinkType.MAGNET) return
         _links.update { current -> if (current.any { it.url == link.url }) current else current + link }
-        _selectedLink.compareAndSet(null, link)
+        if (link.name == preferredLinkName) {
+            _selectedLink.value = link
+        } else {
+            _selectedLink.compareAndSet(null, link)
+        }
     }
 
     private fun addSubtitle(subtitle: SubtitleFile) {
-        _subtitles.update { current -> if (current.any { it.url == subtitle.url }) current else current + subtitle }
+        _subtitles.update { current ->
+            if (current.any { it.url == subtitle.url }) current else current + subtitle
+        }
     }
 
     fun selectLink(link: ExtractorLink) {
+        preferredLinkName = link.name
         _selectedLink.value = link
     }
 
     fun selectSubtitle(subtitle: SubtitleFile?) {
+        subtitle?.let { preferredSubLang = it.lang }
         _selectedSubtitle.value = subtitle
     }
 
@@ -349,6 +553,24 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val selectedSubtitle by viewModel.selectedSubtitle.collectAsState()
     val resolving by viewModel.resolving.collectAsState()
     val error by viewModel.error.collectAsState()
+    val queue by viewModel.queue.collectAsState()
+    val currentIndex by viewModel.currentIndex.collectAsState()
+    val currentHistory by viewModel.currentHistory.collectAsState()
+    val switching by viewModel.switching.collectAsState()
+    val switchError by viewModel.switchError.collectAsState()
+
+    var downloads by remember { mutableStateOf(DownloadStore.current(context)) }
+    LaunchedEffect(Unit) {
+        DownloadStore.entries.collect { updated -> updated?.let { downloads = it } }
+    }
+    var watchedKeys by remember { mutableStateOf(WatchedStore.current(context)) }
+    LaunchedEffect(Unit) {
+        WatchedStore.keys.collect { updated -> updated?.let { watchedKeys = it } }
+    }
+
+    var panelOpen by remember { mutableStateOf(false) }
+    /** A switch should start the new episode from its saved position. */
+    var pendingSwitchResume by remember { mutableStateOf(false) }
 
     var controllerVisible by remember { mutableStateOf(true) }
     var showSources by remember { mutableStateOf(false) }
@@ -364,10 +586,82 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     }
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
-    val resumeKey = viewModel.args.resumeKey
+
+    // A series walks between episodes through the same transport controls
+    // the player already shows: the prev/next buttons appear when a queue
+    // exists, and end-of-queue taps simply do nothing.
+    val hasQueue = queue != null
+    val forwardingPlayer = remember(exoPlayer, hasQueue) {
+        object : ForwardingPlayer(exoPlayer) {
+            override fun getAvailableCommands(): Player.Commands =
+                super.getAvailableCommands().buildUpon().apply {
+                    if (hasQueue) {
+                        add(Player.COMMAND_SEEK_TO_NEXT)
+                        add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                        add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                        add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    }
+                }.build()
+
+            override fun isCommandAvailable(command: Int): Boolean =
+                (hasQueue && (
+                    command == Player.COMMAND_SEEK_TO_NEXT ||
+                        command == Player.COMMAND_SEEK_TO_PREVIOUS ||
+                        command == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM ||
+                        command == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+                    )) || super.isCommandAvailable(command)
+
+            override fun seekToNext() {
+                switchBy(1)
+            }
+
+            override fun seekToPrevious() {
+                switchBy(-1)
+            }
+
+            override fun seekToNextMediaItem() {
+                switchBy(1)
+            }
+
+            override fun seekToPreviousMediaItem() {
+                switchBy(-1)
+            }
+        }
+    }
 
     var historyRecorded by remember { mutableStateOf(false) }
     var watchedMarked by remember { mutableStateOf(false) }
+
+    /** The resume key of whichever episode is on screen right now. */
+    fun currentResumeKey(): String =
+        viewModel.currentHistory.value?.resumeKey ?: viewModel.args.resumeKey
+
+    /**
+     * Moves to another episode in the queue. Saves the current progress
+     * (with the 90% watched rule), prefers the local file when the target is
+     * downloaded, and ignores taps while a switch is already loading.
+     */
+    fun switchEpisode(index: Int) {
+        val q = queue ?: return
+        if (switching) return
+        if (index !in q.episodes.indices) return
+        recordHistory()
+        historyRecorded = false
+        watchedMarked = false
+        pendingSwitchResume = true
+        val target = q.episodes[index]
+        val download = downloads.firstOrNull {
+            it.apiName == q.apiName && it.url == q.url &&
+                it.season == target.season && it.episode == target.number &&
+                it.state == DownloadStore.STATE_DONE && it.fileUri != null
+        }
+        viewModel.switchTo(index, download?.fileUri, download?.subtitleUri)
+        panelOpen = false
+    }
+
+    fun switchBy(offset: Int) {
+        switchEpisode(currentIndex + offset)
+    }
 
     /**
      * Feeds the watch history: the first call past the 5-second mark creates
@@ -378,7 +672,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
      * Reaching 90% also marks the episode/movie watched.
      */
     fun recordHistory() {
-        val entry = viewModel.args.history ?: return
+        val entry = viewModel.currentHistory.value ?: return
         if (AppPrefs.pauseHistory(context)) return
         val position = exoPlayer.currentPosition
         if (position < 5_000L) return
@@ -465,7 +759,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             recordHistory()
             val position = exoPlayer.currentPosition
             if (exoPlayer.mediaItemCount > 0 && position > 0) {
-                AppPrefs.setPosition(context, resumeKey, position)
+                AppPrefs.setPosition(context, currentResumeKey(), position)
             }
             exoPlayer.release()
         }
@@ -475,10 +769,16 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     LaunchedEffect(selectedLink, selectedSubtitle) {
         val link = selectedLink ?: return@LaunchedEffect
         playbackFailed = false
-        val position = if (exoPlayer.mediaItemCount > 0) {
-            exoPlayer.currentPosition
-        } else {
-            AppPrefs.position(context, resumeKey).takeIf { it > 5_000L } ?: 0L
+        val position = when {
+            // A fresh episode resumes from wherever History left it.
+            pendingSwitchResume -> {
+                pendingSwitchResume = false
+                AppPrefs.position(context, currentResumeKey()).takeIf { it > 5_000L } ?: 0L
+            }
+
+            exoPlayer.mediaItemCount > 0 -> exoPlayer.currentPosition
+
+            else -> AppPrefs.position(context, currentResumeKey()).takeIf { it > 5_000L } ?: 0L
         }
         exoPlayer.setMediaSource(buildMediaSource(link, viewModel.api, selectedSubtitle, context))
         exoPlayer.prepare()
@@ -492,11 +792,19 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         while (true) {
             delay(5_000L)
             if (exoPlayer.isPlaying) {
-                AppPrefs.setPosition(context, resumeKey, exoPlayer.currentPosition)
+                AppPrefs.setPosition(context, currentResumeKey(), exoPlayer.currentPosition)
                 recordHistory()
             }
         }
     }
+
+    // The episodes panel closes before back can leave the player.
+    // The controls do not auto-hide while the episodes panel is open.
+    LaunchedEffect(panelOpen) {
+        playerViewRef?.controllerShowTimeoutMs = if (panelOpen) 0 else 3_000
+    }
+
+    BackHandler(enabled = panelOpen) { panelOpen = false }
 
     BackHandler(onBack = onBack)
 
@@ -509,7 +817,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    player = exoPlayer
+                    player = forwardingPlayer
                     useController = true
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     controllerShowTimeoutMs = 3_000
@@ -526,6 +834,10 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         )
 
         when {
+            // A switch never blanks the screen: the old episode keeps
+            // playing under a small loader until the new one is ready.
+            switching -> Unit
+
             selectedLink == null && resolving -> LoadingBox()
 
             selectedLink == null -> ErrorBox(
@@ -538,6 +850,102 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 onRetry = { showSources = true },
                 retryLabel = stringResource(R.string.sources),
             )
+        }
+
+        // Loading chip for an episode switch, over the still-playing video.
+        AnimatedVisibility(
+            visible = switching,
+            enter = fadeIn(tween(220)),
+            exit = fadeOut(tween(180)),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.7f),
+                contentColor = Color.White,
+                modifier = Modifier.padding(top = 64.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    LoadingIndicator(Modifier.size(22.dp))
+                    Text(
+                        text = stringResource(R.string.player_loading_episode),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+
+        // A failed switch keeps the previous episode alive and offers Retry.
+        AnimatedVisibility(
+            visible = switchError != null,
+            enter = fadeIn(tween(220)),
+            exit = fadeOut(tween(180)),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.8f),
+                contentColor = Color.White,
+                modifier = Modifier.padding(horizontal = 32.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.player_switch_failed),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    androidx.compose.material3.TextButton(onClick = viewModel::retrySwitch) {
+                        Text(stringResource(R.string.retry))
+                    }
+                    androidx.compose.material3.TextButton(onClick = viewModel::clearSwitchError) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+        }
+
+        // The episodes panel: slides in from the end side, over the video,
+        // playback untouched. Tapping the scrim, swiping or back closes it.
+        val q = queue
+        if (q != null && panelOpen) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .clickable { panelOpen = false },
+            )
+        }
+        if (q != null) {
+            val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current ==
+                androidx.compose.ui.unit.LayoutDirection.Rtl
+            AnimatedVisibility(
+                visible = panelOpen,
+                enter = slideInHorizontally(animationSpec = softSpring()) { if (rtl) -it else it } +
+                    fadeIn(tween(220)),
+                exit = slideOutHorizontally(animationSpec = softSpring()) { if (rtl) -it else it } +
+                    fadeOut(tween(180)),
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                EpisodesPanel(
+                    queue = q,
+                    currentIndex = currentIndex,
+                    watchedKeys = watchedKeys,
+                    historyEntry = currentHistory,
+                    downloads = downloads,
+                    onPick = { index -> switchEpisode(index) },
+                    onDismiss = { panelOpen = false },
+                    modifier = Modifier
+                        .fillMaxWidth(0.4f)
+                        .fillMaxSize(),
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -567,13 +975,31 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    viewModel.args.subtitle?.let {
+                    // The label follows the current episode across switches.
+                    val episodeLabel = currentHistory?.let { h ->
+                        if (h.season != null || h.episode != null) {
+                            "S${h.season ?: 1} E${h.episode ?: 1}" +
+                                (h.episodeTitle?.takeIf { it.isNotBlank() }?.let { " • $it" } ?: "")
+                        } else {
+                            viewModel.args.subtitle
+                        }
+                    } ?: viewModel.args.subtitle
+                    episodeLabel?.let {
                         Text(
                             text = it,
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White.copy(alpha = 0.75f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (queue != null) {
+                    IconButton(onClick = { panelOpen = true }) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.PlaylistPlay,
+                            contentDescription = stringResource(R.string.episodes),
+                            tint = Color.White,
                         )
                     }
                 }

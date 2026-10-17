@@ -25,6 +25,8 @@ data class PlayerArgs(
     val history: HistoryStore.HistoryEntry? = null,
     /** A subtitle file downloaded beside the video, for offline playback. */
     val offlineSubtitleUri: String? = null,
+    /** The series' episode list when this is an episode, for prev/next and the episodes panel. */
+    val queue: EpisodeQueue? = null,
 )
 
 /**
