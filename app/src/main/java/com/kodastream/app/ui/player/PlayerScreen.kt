@@ -601,6 +601,32 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         viewModel.currentHistory.value?.resumeKey ?: viewModel.args.resumeKey
 
     /**
+    fun recordHistory() {
+        val entry = viewModel.currentHistory.value ?: return
+        if (AppPrefs.pauseHistory(context)) return
+        val position = exoPlayer.currentPosition
+        if (position < 5_000L) return
+        val duration = exoPlayer.duration.takeIf { it > 0 } ?: 0L
+        if (!historyRecorded) {
+            HistoryStore.upsert(context, entry.copy(positionMs = position, durationMs = duration))
+            historyRecorded = true
+        } else {
+            HistoryStore.updateProgress(context, entry.key, position, duration)
+        }
+        if (!watchedMarked && duration > 0 && position >= duration * 0.9) {
+            WatchedStore.setWatched(
+                context = context,
+                apiName = entry.apiName,
+                url = entry.url,
+                season = entry.season,
+                episode = entry.episode,
+                resumeKey = entry.resumeKey,
+                watched = true,
+            )
+            watchedMarked = true
+        }
+    }
+
      * Moves to another episode in the queue. Saves the current progress
      * (with the 90% watched rule), prefers the local file when the target is
      * downloaded, and ignores taps while a switch is already loading.
@@ -678,31 +704,6 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
      * background dispatcher inside the store, never on the player's thread.
      * Reaching 90% also marks the episode/movie watched.
      */
-    fun recordHistory() {
-        val entry = viewModel.currentHistory.value ?: return
-        if (AppPrefs.pauseHistory(context)) return
-        val position = exoPlayer.currentPosition
-        if (position < 5_000L) return
-        val duration = exoPlayer.duration.takeIf { it > 0 } ?: 0L
-        if (!historyRecorded) {
-            HistoryStore.upsert(context, entry.copy(positionMs = position, durationMs = duration))
-            historyRecorded = true
-        } else {
-            HistoryStore.updateProgress(context, entry.key, position, duration)
-        }
-        if (!watchedMarked && duration > 0 && position >= duration * 0.9) {
-            WatchedStore.setWatched(
-                context = context,
-                apiName = entry.apiName,
-                url = entry.url,
-                season = entry.season,
-                episode = entry.episode,
-                resumeKey = entry.resumeKey,
-                watched = true,
-            )
-            watchedMarked = true
-        }
-    }
 
     // The subtitle style is applied the moment it changes - also while the
     // style sheet is open, so moving a slider shows on the video behind it.
@@ -938,7 +939,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     fadeIn(tween(220)),
                 exit = slideOutHorizontally(animationSpec = softSpring()) { if (rtl) -it else it } +
                     fadeOut(tween(180)),
-                modifier = Modifier.align(Alignment.End),
+                modifier = Modifier.align(Alignment.CenterEnd),
             ) {
                 EpisodesPanel(
                     queue = q,
