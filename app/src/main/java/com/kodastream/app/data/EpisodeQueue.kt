@@ -139,7 +139,7 @@ object EpisodeQueues {
                 season = record.season ?: -1,
                 number = record.episode ?: index + 1,
                 name = record.episodeTitle,
-                data = record.data,
+                data = record.data ?: "",
                 posterUrl = posterUrl,
                 index = index,
                 seasonIndex = index,
