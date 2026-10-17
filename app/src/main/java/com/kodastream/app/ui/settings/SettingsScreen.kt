@@ -63,6 +63,7 @@ fun SettingsScreen(
     var autoUpdate by remember { mutableStateOf(AppPrefs.autoUpdate(context)) }
     var navPosition by remember { mutableStateOf(AppPrefs.navPosition(context)) }
     var pauseHistory by remember { mutableStateOf(AppPrefs.pauseHistory(context)) }
+    var keepScreenOn by remember { mutableStateOf(AppPrefs.keepScreenOn(context)) }
     var downloadWifiOnly by remember { mutableStateOf(AppPrefs.downloadWifiOnly(context)) }
     var downloadConcurrent by remember { mutableStateOf(AppPrefs.downloadMaxConcurrent(context)) }
     var downloadLocation by remember { mutableStateOf(DownloadLocations.readableLocation(context)) }
@@ -156,6 +157,20 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+
+        // ---------------------------------------------------------------- playback
+        item { GroupTitle(stringResource(R.string.settings_playback)) }
+        item {
+            SwitchRow(
+                title = stringResource(R.string.settings_keep_screen_on),
+                summary = stringResource(R.string.settings_keep_screen_on_summary),
+                checked = keepScreenOn,
+                onCheckedChange = { value ->
+                    AppPrefs.setKeepScreenOn(context, value)
+                    keepScreenOn = value
+                },
+            )
         }
 
         // ---------------------------------------------------------------- history

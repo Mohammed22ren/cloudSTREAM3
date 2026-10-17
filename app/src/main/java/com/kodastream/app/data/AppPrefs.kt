@@ -18,6 +18,8 @@ object AppPrefs {
     private const val KEY_DL_WIFI = "download_wifi_only"
     private const val KEY_DL_MAX = "download_max_concurrent"
     private const val KEY_DL_QUALITY = "download_last_quality"
+    private const val KEY_DL_FOLDERS_DONE = "download_folders_migrated"
+    private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val POSITION_PREFIX = "pos_"
 
     const val NAV_SIDE = "side"
@@ -72,6 +74,21 @@ object AppPrefs {
 
     fun setDownloadMaxConcurrent(context: Context, value: Int) {
         prefs(context).edit { putInt(KEY_DL_MAX, value.coerceIn(1, 3)) }
+    }
+
+    /** True once the one-time move into per-title folders has run. */
+    fun downloadsFolderMigrated(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_DL_FOLDERS_DONE, false)
+
+    fun setDownloadsFolderMigrated(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(KEY_DL_FOLDERS_DONE, value) }
+    }
+
+    /** Keep the screen awake while the player plays. On by default. */
+    fun keepScreenOn(context: Context): Boolean = prefs(context).getBoolean(KEY_KEEP_SCREEN_ON, true)
+
+    fun setKeepScreenOn(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(KEY_KEEP_SCREEN_ON, value) }
     }
 
     /** The quality last picked in the download sheet, preselected next time. */

@@ -188,4 +188,13 @@
     <string name="download_notification_pause_all">Pause all</string>
     <string name="download_notification_cancel_all">Cancel all</string>
     <string name="download_notification_count">%d downloads</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_keep_screen_on">Keep screen on</string>
+    <string name="settings_keep_screen_on_summary">Prevents the screen from turning off while watching</string>
+    <string name="downloads_episodes_count">%d episodes</string>
+    <string name="downloads_delete_title">Delete title</string>
+    <string name="downloads_delete_title_confirm">Delete this title and all its downloaded episodes?</string>
+    <string name="cd_expand">Expand</string>
+    <string name="cd_collapse">Collapse</string>
+    <string name="downloads_migrated">Organized %d downloads into folders</string>
 </resources>

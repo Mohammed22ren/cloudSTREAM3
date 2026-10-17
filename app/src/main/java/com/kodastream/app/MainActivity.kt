@@ -6,9 +6,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.kodastream.app.data.AppEvents
 import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.downloads.DownloadMigration
 import com.kodastream.app.downloads.DownloadService
 import com.kodastream.app.engine.AppBootstrap
 import com.kodastream.app.ui.AppRoot
@@ -29,6 +33,9 @@ class MainActivity : AppCompatActivity() {
         CommonActivity.setActivityInstance(this)
         AppBootstrap.start(this)
         handleIntent(intent)
+
+        // One-time: older downloads move into their title folders.
+        lifecycleScope.launch(Dispatchers.IO) { DownloadMigration.run(this@MainActivity) }
 
         // Interrupted and queued downloads resume where they left off.
         if (DownloadStore.current(this).any {

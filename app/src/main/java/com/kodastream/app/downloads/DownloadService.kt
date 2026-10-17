@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.os.Build
 import android.os.IBinder
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.io.IOException
 import java.net.URI
 import java.time.Duration
@@ -220,6 +222,16 @@ class DownloadService : Service() {
     private suspend fun runDownload(id: String) {
         val record = DownloadStore.find(this, id) ?: return
         DownloadStore.update(this, id) { it.copy(state = DownloadStore.STATE_DOWNLOADING, error = null) }
+
+        // One folder per title: resolved once (reusing a sibling episode's
+        // folder when there is one) and kept on the record from then on.
+        DownloadStore.find(this, id)?.let { current ->
+            if (current.folderUri == null) {
+                DownloadLocations.resolveFolder(this, current)?.let { folder ->
+                    DownloadStore.update(this, id) { it.copy(folderUri = folder) }
+                }
+            }
+        }
 
         // The worker checks this between reads: pause and cancel must not wait
         // for a blocking socket to time out.
@@ -428,15 +440,15 @@ class DownloadService : Service() {
 
     private fun downloadPoster(id: String) {
         val record = DownloadStore.find(this, id) ?: return
-        val base = record.fileName.substringBeforeLast('.')
-        val posterRecord = record.copy(fileName = "$base.jpg")
-        val uri = DownloadLocations.ensureTarget(this, posterRecord, fresh = true) ?: return
         try {
             val bytes = fetchBytes(record.posterUrl ?: return, record.posterHeaders ?: emptyMap())
-            DownloadLocations.openOutput(this, uri, append = false).use { it.write(bytes) }
-            DownloadStore.update(this, id) { it.copy(posterUri = uri) }
+            // Thumbnails live in the app's own storage; the user's download
+            // folder holds only video files.
+            val dir = File(filesDir, "download_posters").apply { mkdirs() }
+            val file = File(dir, "${record.id.hashCode()}.jpg")
+            file.writeBytes(bytes)
+            DownloadStore.update(this, id) { it.copy(posterUri = Uri.fromFile(file).toString()) }
         } catch (_: Throwable) {
-            DownloadLocations.delete(this, uri)
         }
     }
 

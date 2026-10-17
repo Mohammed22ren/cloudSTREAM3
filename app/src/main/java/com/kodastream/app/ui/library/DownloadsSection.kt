@@ -24,6 +24,8 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Downloading
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -94,6 +96,7 @@ fun DownloadsSection(
     }
 
     var pendingDelete by remember { mutableStateOf<Download?>(null) }
+    var pendingDeleteTitle by remember { mutableStateOf<List<Download>?>(null) }
     var showClearAll by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
@@ -140,6 +143,7 @@ fun DownloadsSection(
                     onOpenItem = onOpenItem,
                     onResume = onResume,
                     onDelete = { pendingDelete = it },
+                    onDeleteTitle = { pendingDeleteTitle = it },
                 )
             }
         }
@@ -162,6 +166,8 @@ fun DownloadsSection(
                     DownloadLocations.delete(context, download.fileUri)
                     DownloadLocations.delete(context, download.posterUri)
                     DownloadStore.remove(context, download.id)
+                    // The title folder goes when its last file does.
+                    DownloadLocations.deleteFolderIfEmpty(context, download.folderUri)
                     pendingDelete = null
                 }) {
                     Text(stringResource(R.string.downloads_delete_file))
@@ -175,6 +181,36 @@ fun DownloadsSection(
         )
     }
 
+    pendingDeleteTitle?.let { titleRecords ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteTitle = null },
+            title = { Text(stringResource(R.string.downloads_delete_title_confirm)) },
+            text = { Text(titleRecords.first().title) },
+            confirmButton = {
+                TextButton(onClick = {
+                    titleRecords.forEach { download ->
+                        DownloadLocations.delete(context, download.fileUri)
+                        DownloadLocations.delete(context, download.posterUri)
+                        DownloadStore.remove(context, download.id)
+                    }
+                    DownloadLocations.deleteTitleFolder(
+                        context,
+                        titleRecords.first().folderUri,
+                        titleRecords.mapNotNull { it.fileUri }.toSet(),
+                    )
+                    pendingDeleteTitle = null
+                }) {
+                    Text(stringResource(R.string.downloads_delete_title))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteTitle = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     if (showClearAll) {
         AlertDialog(
             onDismissRequest = { showClearAll = false },
@@ -182,9 +218,18 @@ fun DownloadsSection(
             text = { Text(stringResource(R.string.downloads_delete_confirm_text)) },
             confirmButton = {
                 TextButton(onClick = {
-                    DownloadStore.current(context).forEach { download ->
+                    val records = DownloadStore.current(context)
+                    records.forEach { download ->
                         DownloadLocations.delete(context, download.fileUri)
                         DownloadLocations.delete(context, download.posterUri)
+                    }
+                    // Only folders the app's own records point at - never
+                    // anything the app did not create.
+                    records.mapNotNull { it.folderUri }.distinct().forEach { folder ->
+                        DownloadLocations.deleteTitleFolder(
+                            context, folder,
+                            records.mapNotNull { it.fileUri }.toSet(),
+                        )
                     }
                     DownloadStore.clear(context)
                     showClearAll = false
@@ -208,15 +253,17 @@ private fun DownloadsList(
     onOpenItem: (DetailsArgs) -> Unit,
     onResume: (PlayerArgs) -> Unit,
     onDelete: (Download) -> Unit,
+    onDeleteTitle: (List<Download>) -> Unit,
 ) {
     val context = LocalContext.current
-    // Series and anime share a header per title; movies stand alone.
+    // One group per title - series episodes together, each movie on its own.
     val groups = remember(downloads) {
         downloads
-            .groupBy { if (it.type == "movie") "movie/${it.id}" else "series/${it.apiName}|${it.url}" }
+            .groupBy { "${it.apiName}|${it.url}" }
             .map { (_, list) -> list.sortedByDescending { it.createdAt } }
             .sortedByDescending { list -> list.maxOf { it.createdAt } }
     }
+    var collapsed by remember { mutableStateOf(setOf<String>()) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -228,13 +275,27 @@ private fun DownloadsList(
         ),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        groups.forEach { items ->
-            if (items.size > 1 || items.first().type != "movie") {
-                item(key = "header-${items.first().let { "${it.apiName}|${it.url}" }}") {
-                    SectionHeader(items.first().title)
-                }
+        groups.forEach { groupItems ->
+            val group = groupItems.first()
+            val groupKey = "${group.apiName}|${group.url}"
+            val expanded = groupKey !in collapsed
+            item(key = "title-$groupKey") {
+                TitleCard(
+                    title = group.title,
+                    posterUrl = group.posterUri ?: group.posterUrl,
+                    posterHeaders = group.posterHeaders,
+                    episodeCount = groupItems.size,
+                    totalBytes = groupItems.sumOf { if (it.totalBytes > 0) it.totalBytes else it.receivedBytes },
+                    expanded = expanded,
+                    onToggle = {
+                        collapsed = if (expanded) collapsed + groupKey else collapsed - groupKey
+                    },
+                    onDelete = { onDeleteTitle(groupItems) },
+                )
             }
-            items(items, key = { it.id }) { download ->
+            if (expanded) {
+                val items = groupItems
+                items(items, key = { it.id }) { download ->
                 DownloadRow(
                     download = download,
                     onPlay = {
@@ -287,6 +348,79 @@ private fun DownloadsList(
                         }
                     },
                     onDelete = { onDelete(download) },
+                )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One title: its poster, how many episodes are here, how much space they
+ * take, and the actions on the whole folder - expand to see the episodes.
+ */
+@Composable
+private fun TitleCard(
+    title: String,
+    posterUrl: String?,
+    posterHeaders: Map<String, String>?,
+    episodeCount: Int,
+    totalBytes: Long,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val context = LocalContext.current
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RemoteImage(
+                url = posterUrl,
+                headers = posterHeaders,
+                modifier = Modifier
+                    .width(56.dp)
+                    .aspectRatio(2f / 3f)
+                    .clip(MaterialTheme.shapes.small),
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val size = Formatter.formatFileSize(context, totalBytes)
+                Text(
+                    text = stringResource(R.string.downloads_episodes_count, episodeCount) + "  •  " + size,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Rounded.DeleteSweep,
+                    contentDescription = stringResource(R.string.downloads_delete_title),
+                )
+            }
+            IconButton(onClick = onToggle) {
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.cd_collapse else R.string.cd_expand,
+                    ),
                 )
             }
         }

@@ -52,7 +52,10 @@ object DownloadStore {
         /** direct | hls (dash is rejected before enqueue). */
         val streamType: String = "direct",
         val fileName: String,
+        /** The title's own folder this file lives in - stable across downloads and restarts. */
+        val folderUri: String? = null,
         val fileUri: String? = null,
+        /** Internal-storage thumbnail; the user's folder holds only video files. */
         val posterUri: String? = null,
         val state: String = STATE_QUEUED,
         val receivedBytes: Long = 0,
@@ -173,17 +176,142 @@ object DownloadLocations {
             }
         }
 
+        val folderUri = download.folderUri ?: resolveFolder(context, download) ?: return null
         val mime = if (download.isHls) "video/mp2t" else "video/mp4"
-        val tree = validTree(context)
-        if (tree != null) {
-            if (fresh) tree.findFile(download.fileName)?.delete()
-            val created = tree.createFile(mime, download.fileName.substringBeforeLast('.'))
+        if (folderUri.startsWith("content://")) {
+            val folder = DocumentFile.fromSingleUri(context, Uri.parse(folderUri)) ?: return null
+            if (fresh) folder.findFile(download.fileName)?.delete()
+            val created = folder.createFile(mime, download.fileName.substringBeforeLast('.'))
             return created?.uri?.toString()
         }
-        val file = File(defaultDir(context), download.fileName)
-        if (fresh) file.delete()
-        file.parentFile?.mkdirs()
-        return Uri.fromFile(file).toString()
+        val folder = File(Uri.parse(folderUri).path!!)
+        folder.mkdirs()
+        if (fresh) File(folder, download.fileName).delete()
+        return Uri.fromFile(File(folder, download.fileName)).toString()
+    }
+
+    // ---- one folder per title ----
+
+    private fun sanitizeFilePart(name: String): String =
+        name.replace(Regex("[\\/:*?\"<>|]"), " ")
+            .trim()
+            .trimEnd('.')
+            .trim()
+            .take(100)
+            .ifBlank { "Video" }
+
+    /** The folder name of a title: episodes share the series title, movies carry their year. */
+    fun titleFolderName(download: DownloadStore.Download): String {
+        val clean = sanitizeFilePart(download.title)
+        return if (download.season == null && download.episode == null && download.year != null) {
+            "$clean (${download.year})"
+        } else {
+            clean
+        }
+    }
+
+    /**
+     * The folder this title's files live in, stable across downloads and
+     * restarts: the record's own folder first, then a sibling episode's,
+     * then a fresh folder whose name no other title - and nothing the app
+     * did not create - is already using. The URI is stored on the record,
+     * so later episodes never recompute it, wherever the setting points.
+     */
+    fun resolveFolder(context: Context, download: DownloadStore.Download): String? {
+        val records = DownloadStore.current(context)
+        val titleId = "${download.apiName}|${download.url}"
+
+        // This title already owns a folder - reuse it wherever it lives.
+        val owned = download.folderUri
+            ?: records.firstOrNull { "${it.apiName}|${it.url}" == titleId && it.folderUri != null }?.folderUri
+        if (owned != null && folderExists(context, owned)) return owned
+
+        val base = titleFolderName(download)
+        val tree = validTree(context)
+
+        var candidate = base
+        var step = 0
+        while (step < 12) {
+            if (findChildFolder(context, tree, candidate) == null) {
+                return createChildFolder(context, tree, candidate)
+            }
+            // A folder of this name exists but this title does not own it
+            // (owned folders were reused above): disambiguate - year, then
+            // source name, then a counter.
+            candidate = when (step) {
+                0 ->
+                    if (download.year != null && !base.endsWith(" (${download.year})")) {
+                        "$base (${download.year})"
+                    } else {
+                        "$base (${download.apiName})"
+                    }
+
+                1 -> "$base (${download.apiName})"
+                else -> "$base (${step - 1})"
+            }
+            step++
+        }
+        return createChildFolder(context, tree, "$base ${System.currentTimeMillis()}")
+    }
+
+    private fun findChildFolder(context: Context, tree: DocumentFile?, name: String): String? {
+        if (tree != null) return tree.findFile(name)?.uri?.toString()
+        val folder = File(defaultDir(context), name)
+        return if (folder.exists()) Uri.fromFile(folder).toString() else null
+    }
+
+    private fun createChildFolder(context: Context, tree: DocumentFile?, name: String): String? {
+        if (tree != null) return tree.createDirectory(name)?.uri?.toString()
+        val folder = File(defaultDir(context), name)
+        if (!folder.exists() && !folder.mkdirs()) return null
+        return Uri.fromFile(folder).toString()
+    }
+
+    fun folderExists(context: Context, uriString: String): Boolean = when {
+        uriString.startsWith("content://") ->
+            DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.exists() == true
+        uriString.startsWith("file://") -> File(Uri.parse(uriString).path!!).exists()
+        else -> false
+    }
+
+    /** Deletes the folder when nothing is left in it - never throws. */
+    fun deleteFolderIfEmpty(context: Context, uriString: String?): Boolean {
+        if (uriString == null || !folderExists(context, uriString)) return false
+        val isEmpty = when {
+            uriString.startsWith("content://") ->
+                DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.listFiles()?.isEmpty() == true
+            uriString.startsWith("file://") ->
+                File(Uri.parse(uriString).path!!).listFiles().isNullOrEmpty()
+            else -> return false
+        }
+        return isEmpty && delete(context, uriString)
+    }
+
+    /**
+     * Deletes a whole title folder, but only when every file inside belongs
+     * to our own records - anything the app did not create stays untouched.
+     */
+    fun deleteTitleFolder(context: Context, folderUri: String?, ourFiles: Set<String>): Boolean {
+        if (folderUri == null || !folderExists(context, folderUri)) return false
+        val childUris: List<String> = when {
+            folderUri.startsWith("content://") ->
+                DocumentFile.fromSingleUri(context, Uri.parse(folderUri))?.listFiles()
+                    ?.mapNotNull { it.uri?.toString() }
+                    ?: return delete(context, folderUri)
+
+            folderUri.startsWith("file://") ->
+                File(Uri.parse(folderUri).path!!).listFiles()
+                    ?.map { Uri.fromFile(it).toString() }
+                    ?: return delete(context, folderUri)
+
+            else -> return delete(context, folderUri)
+        }
+        // Foreign files present: remove only ours and keep the folder.
+        if (childUris.any { it !in ourFiles }) {
+            childUris.filter { it in ourFiles }.forEach { delete(context, it) }
+            return false
+        }
+        return delete(context, folderUri)
     }
 
     fun exists(context: Context, uriString: String): Boolean = when {

@@ -188,4 +188,13 @@
     <string name="download_notification_pause_all">إيقاف الكل مؤقتًا</string>
     <string name="download_notification_cancel_all">إلغاء الكل</string>
     <string name="download_notification_count">%d تنزيلات</string>
+    <string name="settings_playback">التشغيل</string>
+    <string name="settings_keep_screen_on">إبقاء الشاشة قيد التشغيل</string>
+    <string name="settings_keep_screen_on_summary">يمنع انطفاء الشاشة أثناء المشاهدة</string>
+    <string name="downloads_episodes_count">%d حلقة</string>
+    <string name="downloads_delete_title">حذف العنوان</string>
+    <string name="downloads_delete_title_confirm">حذف هذا العنوان وكل حلقاته المنزّلة؟</string>
+    <string name="cd_expand">توسيع</string>
+    <string name="cd_collapse">طوي</string>
+    <string name="downloads_migrated">تم تنظيم %d من التنزيلات في مجلدات</string>
 </resources>

@@ -442,11 +442,16 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 // Pause, end of file, error, backgrounding: progress is saved now.
                 if (!isPlaying) recordHistory()
+                // Keep the screen awake only while the video actually plays,
+                // and only when the setting asks for it.
+                view.keepScreenOn = isPlaying && AppPrefs.keepScreenOn(context)
             }
         }
         exoPlayer.addListener(listener)
         onDispose {
             exoPlayer.removeListener(listener)
+            // The flag can never leak past the player screen.
+            view.keepScreenOn = false
             recordHistory()
             val position = exoPlayer.currentPosition
             if (exoPlayer.mediaItemCount > 0 && position > 0) {
