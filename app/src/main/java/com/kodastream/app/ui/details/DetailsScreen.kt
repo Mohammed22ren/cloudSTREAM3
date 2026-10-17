@@ -472,12 +472,22 @@ private fun DetailsContent(
                 val number = episode.episode ?: index + 1
                 val id = DownloadStore.idOf(response.apiName, response.url, season, number)
                 if (downloads.any { it.id == id && it.state == DownloadStore.STATE_DONE }) continue
-                val links = mutableListOf<ExtractorLink>()
-                val subs = mutableListOf<SubtitleFile>()
-                Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
-                    api.loadLinks(episode.data, false, { subs.add(it) }, { links.add(it) })
+                // Thread-safe for the same reason as the download card:
+                // providers fire these callbacks from parallel extractors.
+                val links = java.util.Collections.synchronizedList(mutableListOf<ExtractorLink>())
+                val subs = java.util.Collections.synchronizedList(mutableListOf<SubtitleFile>())
+                try {
+                    Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
+                        api.loadLinks(
+                            episode.data, false,
+                            { sub -> runCatching { subs.add(sub) } },
+                            { link -> runCatching { links.add(link) } },
+                        )
+                    }
+                } catch (t: Throwable) {
+                    continue
                 }
-                val usable = links
+                val usable = synchronized(links) { links.toList() }
                     .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
                 val chosen = usable.firstOrNull { it.name.equals(preferredServer, ignoreCase = true) }
                     ?: usable.maxByOrNull { it.quality }
@@ -486,7 +496,7 @@ private fun DetailsContent(
                 val sub = if (preferredSubLang == null) {
                     null
                 } else {
-                    subs.firstOrNull { candidate ->
+                    synchronized(subs) { subs.toList() }.firstOrNull { candidate ->
                         candidate.lang.equals(preferredSubLang, ignoreCase = true) ||
                             candidate.langTag?.startsWith(preferredSubLang, ignoreCase = true) == true
                     }

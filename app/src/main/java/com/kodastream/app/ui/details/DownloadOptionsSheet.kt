@@ -109,15 +109,32 @@ fun DownloadOptionsSheet(
             state = SheetState.Failed
             return@LaunchedEffect
         }
-        val links = mutableListOf<ExtractorLink>()
-        val subs = mutableListOf<SubtitleFile>()
-        Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
-            api.loadLinks(probeData, false, { subs.add(it) }, { links.add(it) })
+        // Providers resolve their extractors in parallel and invoke these
+        // callbacks from several threads at once - the same reason the
+        // player keeps its link list in a thread-safe state flow. A plain
+        // list here corrupts and kills the app from the extension's thread.
+        val links = java.util.Collections.synchronizedList(mutableListOf<ExtractorLink>())
+        val subs = java.util.Collections.synchronizedList(mutableListOf<SubtitleFile>())
+        try {
+            Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
+                api.loadLinks(
+                    probeData, false,
+                    { sub -> runCatching { subs.add(sub) } },
+                    { link -> runCatching { links.add(link) } },
+                )
+            }
+        } catch (t: Throwable) {
+            state = SheetState.Failed
+            return@LaunchedEffect
         }
-        val usable = links
+        // Snapshot: late extractors may keep appending after loadLinks
+        // returned, so the card never iterates the live lists.
+        val linkSnapshot = synchronized(links) { links.toList() }
+        val subSnapshot = synchronized(subs) { subs.toList() }
+        val usable = linkSnapshot
             .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
             .sortedByDescending { it.quality }
-        state = if (usable.isEmpty()) SheetState.Failed else SheetState.Ready(usable, subs)
+        state = if (usable.isEmpty()) SheetState.Failed else SheetState.Ready(usable, subSnapshot)
     }
 
     // Preselect once the list lands.
