@@ -601,6 +601,10 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         viewModel.currentHistory.value?.resumeKey ?: viewModel.args.resumeKey
 
     /**
+     * Feeds the watch history for the episode on screen: the first call past
+     * the 5-second mark creates the entry, later calls move the progress;
+     * reaching 90% also marks the episode watched.
+     */
     fun recordHistory() {
         val entry = viewModel.currentHistory.value ?: return
         if (AppPrefs.pauseHistory(context)) return
@@ -627,6 +631,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
         }
     }
 
+    /**
      * Moves to another episode in the queue. Saves the current progress
      * (with the 90% watched rule), prefers the local file when the target is
      * downloaded, and ignores taps while a switch is already loading.
@@ -696,14 +701,6 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     }
 
 
-    /**
-     * Feeds the watch history: the first call past the 5-second mark creates
-     * the entry (upsert, so a series keeps only its newest episode), later
-     * calls only move the progress. Nothing is recorded while history is
-     * paused or when the user peeked for under five seconds. Writes land on a
-     * background dispatcher inside the store, never on the player's thread.
-     * Reaching 90% also marks the episode/movie watched.
-     */
 
     // The subtitle style is applied the moment it changes - also while the
     // style sheet is open, so moving a slider shows on the video behind it.
