@@ -13,7 +13,6 @@ import android.net.ConnectivityManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import androidx.documentfile.provider.DocumentFile
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DownloadLocations
@@ -489,14 +488,9 @@ class DownloadService : Service() {
             val folder = record.folderUri ?: DownloadLocations.resolveFolder(this, record) ?: return
 
             val uri: String? = if (folder.startsWith("content://")) {
-                val folderDoc = DocumentFile.fromSingleUri(this, Uri.parse(folder))
-                folderDoc?.findFile(subName)?.delete()
-                val doc = folderDoc?.createFile(mime, subName.substringBeforeLast('.'))
-                if (doc != null) {
-                    DownloadLocations.openOutput(this, doc.uri.toString(), append = false).use { it.write(bytes) }
-                    doc.uri.toString()
-                } else {
-                    null
+                // fromSingleUri cannot create files - resolve through the tree.
+                DownloadLocations.createFileInFolder(this, folder, subName, mime)?.also { created ->
+                    DownloadLocations.openOutput(this, created, append = false).use { it.write(bytes) }
                 }
             } else {
                 val dir = File(Uri.parse(folder).path!!)

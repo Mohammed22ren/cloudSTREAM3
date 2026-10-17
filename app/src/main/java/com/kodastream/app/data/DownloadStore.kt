@@ -172,6 +172,35 @@ object DownloadLocations {
      * Creates (or re-uses for resume) the target file and returns its URI.
      * A fresh start deletes any earlier partial file of the same name first.
      */
+    /**
+     * A real directory handle for a stored folder URI. fromSingleUri yields a
+     * SingleDocumentFile that cannot create files or list children - it throws
+     * UnsupportedOperationException - so the folder is looked up as a child
+     * of the current tree instead, which gives a fully functional one.
+     */
+    private fun folderDoc(context: Context, folderUriString: String): DocumentFile? {
+        val tree = validTree(context) ?: return null
+        val target = Uri.parse(folderUriString)
+        return tree.listFiles().firstOrNull { it.uri == target }
+    }
+
+    /** Creates [fileName] inside the stored folder and returns its URI. Null on failure. */
+    fun createFileInFolder(
+        context: Context,
+        folderUriString: String,
+        fileName: String,
+        mime: String,
+    ): String? {
+        if (folderUriString.startsWith("content://")) {
+            val folder = folderDoc(context, folderUriString) ?: return null
+            val doc = folder.createFile(mime, fileName.substringBeforeLast('.')) ?: return null
+            return doc.uri.toString()
+        }
+        val dir = File(Uri.parse(folderUriString).path!!)
+        if (!dir.exists() && !dir.mkdirs()) return null
+        return Uri.fromFile(File(dir, fileName)).toString()
+    }
+
     fun ensureTarget(context: Context, download: DownloadStore.Download, fresh: Boolean): String? {
         // Resuming: the record already points at a file that still exists.
         if (!fresh) {
@@ -183,7 +212,7 @@ object DownloadLocations {
         val folderUri = download.folderUri ?: resolveFolder(context, download) ?: return null
         val mime = if (download.isHls) "video/mp2t" else "video/mp4"
         if (folderUri.startsWith("content://")) {
-            val folder = DocumentFile.fromSingleUri(context, Uri.parse(folderUri)) ?: return null
+            val folder = folderDoc(context, folderUri) ?: return null
             if (fresh) folder.findFile(download.fileName)?.delete()
             val created = folder.createFile(mime, download.fileName.substringBeforeLast('.'))
             return created?.uri?.toString()
@@ -281,14 +310,18 @@ object DownloadLocations {
     /** Deletes the folder when nothing is left in it - never throws. */
     fun deleteFolderIfEmpty(context: Context, uriString: String?): Boolean {
         if (uriString == null || !folderExists(context, uriString)) return false
-        val isEmpty = when {
-            uriString.startsWith("content://") ->
-                DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.listFiles()?.isEmpty() == true
-            uriString.startsWith("file://") ->
-                File(Uri.parse(uriString).path!!).listFiles().isNullOrEmpty()
-            else -> return false
+        return try {
+            val isEmpty = when {
+                uriString.startsWith("content://") ->
+                    folderDoc(context, uriString)?.listFiles()?.isEmpty() == true
+                uriString.startsWith("file://") ->
+                    File(Uri.parse(uriString).path!!).listFiles().isNullOrEmpty()
+                else -> return false
+            }
+            isEmpty && delete(context, uriString)
+        } catch (_: Throwable) {
+            false
         }
-        return isEmpty && delete(context, uriString)
     }
 
     /**
@@ -297,32 +330,40 @@ object DownloadLocations {
      */
     fun deleteTitleFolder(context: Context, folderUri: String?, ourFiles: Set<String>): Boolean {
         if (folderUri == null || !folderExists(context, folderUri)) return false
-        val childUris: List<String> = when {
-            folderUri.startsWith("content://") ->
-                DocumentFile.fromSingleUri(context, Uri.parse(folderUri))?.listFiles()
-                    ?.mapNotNull { it.uri?.toString() }
-                    ?: return delete(context, folderUri)
+        return try {
+            val childUris: List<String> = when {
+                folderUri.startsWith("content://") ->
+                    folderDoc(context, folderUri)?.listFiles()
+                        ?.mapNotNull { it.uri?.toString() }
+                        ?: return delete(context, folderUri)
 
-            folderUri.startsWith("file://") ->
-                File(Uri.parse(folderUri).path!!).listFiles()
-                    ?.map { Uri.fromFile(it).toString() }
-                    ?: return delete(context, folderUri)
+                folderUri.startsWith("file://") ->
+                    File(Uri.parse(folderUri).path!!).listFiles()
+                        ?.map { Uri.fromFile(it).toString() }
+                        ?: return delete(context, folderUri)
 
-            else -> return delete(context, folderUri)
+                else -> return delete(context, folderUri)
+            }
+            // Foreign files present: remove only ours and keep the folder.
+            if (childUris.any { it !in ourFiles }) {
+                childUris.filter { it in ourFiles }.forEach { delete(context, it) }
+                return false
+            }
+            delete(context, folderUri)
+        } catch (_: Throwable) {
+            false
         }
-        // Foreign files present: remove only ours and keep the folder.
-        if (childUris.any { it !in ourFiles }) {
-            childUris.filter { it in ourFiles }.forEach { delete(context, it) }
-            return false
-        }
-        return delete(context, folderUri)
     }
 
-    fun exists(context: Context, uriString: String): Boolean = when {
-        uriString.startsWith("content://") ->
-            DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.exists() == true
-        uriString.startsWith("file://") -> File(Uri.parse(uriString).path!!).exists()
-        else -> false
+    fun exists(context: Context, uriString: String): Boolean = try {
+        when {
+            uriString.startsWith("content://") ->
+                DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.exists() == true
+            uriString.startsWith("file://") -> File(Uri.parse(uriString).path!!).exists()
+            else -> false
+        }
+    } catch (_: Throwable) {
+        false
     }
 
     fun fileLength(context: Context, uriString: String): Long = when {
@@ -344,13 +385,18 @@ object DownloadLocations {
     private fun File.outputStream(append: Boolean): OutputStream =
         if (append) java.io.FileOutputStream(this, true) else java.io.FileOutputStream(this)
 
+    /** Never throws: the UI calls this on the main thread. */
     fun delete(context: Context, uriString: String?): Boolean {
         if (uriString == null) return false
-        return when {
-            uriString.startsWith("content://") ->
-                DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.delete() == true
-            uriString.startsWith("file://") -> File(Uri.parse(uriString).path!!).delete()
-            else -> false
+        return try {
+            when {
+                uriString.startsWith("content://") ->
+                    DocumentFile.fromSingleUri(context, Uri.parse(uriString))?.delete() == true
+                uriString.startsWith("file://") -> File(Uri.parse(uriString).path!!).delete()
+                else -> false
+            }
+        } catch (_: Throwable) {
+            false
         }
     }
 
