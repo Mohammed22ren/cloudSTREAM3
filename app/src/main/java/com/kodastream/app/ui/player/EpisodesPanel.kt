@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Close
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.GraphicEq
@@ -110,7 +110,7 @@ fun EpisodesPanel(
             )
             IconButton(onClick = onDismiss) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.Close,
+                    imageVector = Icons.Rounded.Close,
                     contentDescription = stringResource(R.string.cancel),
                     tint = contentColor,
                 )

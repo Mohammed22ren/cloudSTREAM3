@@ -57,7 +57,7 @@ object EpisodeQueues {
         episodes: List<Episode>,
     ): EpisodeQueue? {
         if (episodes.isEmpty()) return null
-        val grouped = ArrayList<Pair<Int, MutableList<Episode>>>()
+        val grouped = ArrayList<Pair<Int?, MutableList<Episode>>>()
         for (episode in episodes) {
             val season = episode.season
             val bucket = grouped.firstOrNull { it.first == season }?.second

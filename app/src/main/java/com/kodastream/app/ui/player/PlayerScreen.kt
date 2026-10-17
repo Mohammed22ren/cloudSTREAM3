@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Tune
@@ -103,8 +104,6 @@ import com.kodastream.app.data.EpisodeQueue
 import com.kodastream.app.data.EpisodeQueues
 import com.kodastream.app.data.HistoryStore
 import com.kodastream.app.data.PlayerArgs
-import com.kodastream.app.data.DownloadStore
-import com.kodastream.app.data.EpisodeQueue
 import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.data.SubtitleStyleStore
 import com.kodastream.app.engine.Engine

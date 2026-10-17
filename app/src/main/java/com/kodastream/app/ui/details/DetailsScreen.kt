@@ -396,6 +396,7 @@ private fun DetailsContent(
         season: Int?,
         episode: Int?,
         episodeTitle: String?,
+        episodeData: String? = null,
         subtitles: List<SubtitleFile> = emptyList(),
     ) {
         ensureNotifPermission()
@@ -433,6 +434,7 @@ private fun DetailsContent(
                 quality = link.quality,
                 headers = link.getAllHeaders(),
                 streamType = if (isHls) "hls" else "direct",
+                data = episodeData,
                 fileName = fileName,
                 subLang = subtitles.firstOrNull()?.lang,
                 subUrl = subtitles.firstOrNull()?.url,
@@ -505,7 +507,7 @@ private fun DetailsContent(
                 }
                 if (preferredSubLang != null && sub == null) fallbacks++
                 startDownload(
-                    chosen, season, number, episode.name,
+                    chosen, season, number, episode.name, episode.data,
                     sub?.let { listOf(it) } ?: emptyList(),
                 )
                 queued++
@@ -519,7 +521,7 @@ private fun DetailsContent(
         val resumeKey = response.apiName + "|" + data
         // Episodes carry the whole series with them so the player can walk
         // between episodes without loading anything again.
-        val queue = if (episode != null || season != null) {
+        val queue = if (episode != null && allEpisodes.isNotEmpty()) {
             EpisodeQueues.build(
                 apiName = response.apiName,
                 url = response.url,
@@ -898,6 +900,7 @@ private fun DetailsContent(
                         sheetTarget.season,
                         sheetTarget.episode,
                         sheetTarget.episodeTitle,
+                        sheetTarget.data,
                         subtitle?.let { listOf(it) } ?: emptyList(),
                     )
                     announceDownload(1, 0)

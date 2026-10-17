@@ -51,6 +51,8 @@ object DownloadStore {
         val headers: Map<String, String> = emptyMap(),
         /** direct | hls (dash is rejected before enqueue). */
         val streamType: String = "direct",
+        /** The provider data string, so the episode can also be streamed. */
+        val data: String? = null,
         val fileName: String,
         /** The title's own folder this file lives in - stable across downloads and restarts. */
         val folderUri: String? = null,
