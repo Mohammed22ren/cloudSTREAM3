@@ -115,6 +115,7 @@ import com.lagradost.cloudstream3.LiveStreamLoadResponse
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -383,7 +384,13 @@ private fun DetailsContent(
         }
     }
 
-    fun startDownload(link: ExtractorLink, season: Int?, episode: Int?, episodeTitle: String?) {
+    fun startDownload(
+        link: ExtractorLink,
+        season: Int?,
+        episode: Int?,
+        episodeTitle: String?,
+        subtitles: List<SubtitleFile> = emptyList(),
+    ) {
         ensureNotifPermission()
         if (link.quality != Qualities.Unknown.value) AppPrefs.setLastDownloadQuality(context, link.quality)
         val isHls = link.type == ExtractorLinkType.M3U8
@@ -421,6 +428,8 @@ private fun DetailsContent(
                 headers = link.getAllHeaders(),
                 streamType = if (isHls) "hls" else "direct",
                 fileName = fileName,
+                subLang = subtitles.firstOrNull()?.lang,
+                subUrl = subtitles.firstOrNull()?.url,
                 createdAt = System.currentTimeMillis(),
             ),
         )
@@ -431,8 +440,9 @@ private fun DetailsContent(
         scope.launch {
             val api = Engine.provider(response.apiName) ?: return@launch
             val links = mutableListOf<ExtractorLink>()
+            val subs = mutableListOf<SubtitleFile>()
             Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
-                api.loadLinks(data, false, {}, { links.add(it) })
+                api.loadLinks(data, false, { subs.add(it) }, { links.add(it) })
             }
             val usable = links
                 .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
@@ -442,11 +452,11 @@ private fun DetailsContent(
                     context, context.getString(R.string.download_no_sources), Toast.LENGTH_SHORT,
                 ).show()
 
-                usable.size == 1 -> startDownload(usable.first(), season, episode, episodeTitle)
+                usable.size == 1 -> startDownload(usable.first(), season, episode, episodeTitle, subs)
 
                 else -> {
                     qualityLinks = usable
-                    qualityPicked = { startDownload(it, season, episode, episodeTitle) }
+                    qualityPicked = { startDownload(it, season, episode, episodeTitle, subs) }
                 }
             }
         }
@@ -720,14 +730,17 @@ private fun DetailsContent(
                                             )
                                             if (downloads.any { it.id == id && it.state == DownloadStore.STATE_DONE }) continue
                                             val links = mutableListOf<ExtractorLink>()
+                                            val subs = mutableListOf<SubtitleFile>()
                                             Engine.guarded(api.loadLinksTimeoutMs ?: 120_000L) {
-                                                api.loadLinks(ep.data, false, {}, { links.add(it) })
+                                                api.loadLinks(ep.data, false, { subs.add(it) }, { links.add(it) })
                                             }
                                             val best = links
                                                 .filter { it.type == ExtractorLinkType.VIDEO || it.type == ExtractorLinkType.M3U8 }
                                                 .maxByOrNull { it.quality }
                                                 ?: continue
-                                            startDownload(best, ep.season ?: selectedSeason, ep.episode ?: i + 1, ep.name)
+                                            startDownload(
+                                                best, ep.season ?: selectedSeason, ep.episode ?: i + 1, ep.name, subs,
+                                            )
                                             queuedCount++
                                         }
                                         if (queuedCount > 0) {

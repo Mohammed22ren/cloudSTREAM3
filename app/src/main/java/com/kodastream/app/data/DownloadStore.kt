@@ -57,6 +57,10 @@ object DownloadStore {
         val fileUri: String? = null,
         /** Internal-storage thumbnail; the user's folder holds only video files. */
         val posterUri: String? = null,
+        /** The provider's subtitle track to save beside the video, when there is one. */
+        val subLang: String? = null,
+        val subUrl: String? = null,
+        val subtitleUri: String? = null,
         val state: String = STATE_QUEUED,
         val receivedBytes: Long = 0,
         val totalBytes: Long = 0,

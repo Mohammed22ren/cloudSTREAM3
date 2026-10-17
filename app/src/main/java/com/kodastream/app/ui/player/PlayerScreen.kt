@@ -163,6 +163,16 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
                 headers = emptyMap(),
                 type = ExtractorLinkType.VIDEO,
             )
+            // A subtitle downloaded beside the video, if the provider had one.
+            args.offlineSubtitleUri?.let { subUri ->
+                val sub = SubtitleFile(
+                    lang = args.subtitle ?: args.offlineSubtitleUri ?: "Subtitle",
+                    url = subUri,
+                    headers = emptyMap(),
+                )
+                _subtitles.value = listOf(sub)
+                _selectedSubtitle.value = sub
+            }
         } else {
             resolve()
         }

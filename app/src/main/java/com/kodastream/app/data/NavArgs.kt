@@ -23,6 +23,8 @@ data class PlayerArgs(
     val resumeKey: String,
     /** What the watch history should record for this playback, or null to not record. */
     val history: HistoryStore.HistoryEntry? = null,
+    /** A subtitle file downloaded beside the video, for offline playback. */
+    val offlineSubtitleUri: String? = null,
 )
 
 /**

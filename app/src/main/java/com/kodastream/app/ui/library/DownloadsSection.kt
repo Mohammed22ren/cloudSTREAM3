@@ -301,6 +301,8 @@ private fun DownloadsList(
                     onPlay = {
                         val uri = download.fileUri
                         if (uri != null && DownloadLocations.exists(context, uri)) {
+                            val offlineSub = download.subtitleUri
+                                ?.takeIf { DownloadLocations.exists(context, it) }
                             onResume(
                                 PlayerArgs(
                                     apiName = download.apiName,
@@ -308,6 +310,7 @@ private fun DownloadsList(
                                     title = download.title,
                                     subtitle = download.episodeTitle,
                                     resumeKey = "local|${download.id}",
+                                    offlineSubtitleUri = offlineSub,
                                     history = HistoryEntry(
                                         key = "${download.apiName}|${download.url}",
                                         apiName = download.apiName,
@@ -575,6 +578,7 @@ private fun stateLabel(download: Download): String = when (download.state) {
     }
     DownloadStore.STATE_PAUSED -> stringResource(R.string.download_paused)
     DownloadStore.STATE_QUEUED -> stringResource(R.string.download_queued)
-    DownloadStore.STATE_FAILED -> stringResource(R.string.download_failed)
+    DownloadStore.STATE_FAILED -> stringResource(R.string.download_failed) +
+        (download.error?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: "")
     else -> stringResource(R.string.download_failed)
 }

@@ -13,11 +13,16 @@ import android.net.ConnectivityManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.documentfile.provider.DocumentFile
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DownloadLocations
 import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.engine.Engine
 import com.lagradost.cloudstream3.USER_AGENT
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,12 +85,36 @@ class DownloadService : Service() {
     private val active = HashMap<String, Job>()
     private lateinit var notifications: NotificationManager
 
-    private val client by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .readTimeout(Duration.ofSeconds(60))
+    /**
+     * The same client the player would play this link through: the engine's
+     * base client plus the provider's own URL-signing interceptor. A bare
+     * client gets 403s on providers that sign their video requests.
+     */
+    private fun clientFor(record: DownloadStore.Download): OkHttpClient {
+        val api = Engine.provider(record.apiName)
+        val link = ExtractorLink(
+            source = record.apiName,
+            name = record.linkName,
+            url = record.linkUrl,
+            referer = record.headers["referer"] ?: "",
+            quality = record.quality,
+            headers = record.headers,
+            type = if (record.isHls) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO,
+        )
+        return app.baseClient.newBuilder()
+            .apply {
+                api?.getVideoInterceptor(link)?.let { addInterceptor(it) }
+                connectTimeout(Duration.ofSeconds(30))
+                readTimeout(Duration.ofSeconds(60))
+            }
             .build()
     }
+
+    /** Providers sometimes hand out header maps okhttp refuses; clean them. */
+    private fun safeHeaders(headers: Map<String, String>): Map<String, String> =
+        headers
+            .filterKeys { it.isNotBlank() && !it.contains(':') }
+            .mapValues { (_, value) -> value.replace(Regex("[\\r\\n]"), "") }
 
     override fun onCreate() {
         super.onCreate()
@@ -246,6 +275,9 @@ class DownloadService : Service() {
                     if (record.isHls) downloadHls(id, job)
                     else downloadDirect(id, job)
                 }
+                if (record.subUrl != null && DownloadStore.find(this, id)?.subtitleUri == null) {
+                    downloadSubtitle(id)
+                }
                 if (record.posterUrl != null && DownloadStore.find(this, id)?.posterUri == null) {
                     downloadPoster(id)
                 }
@@ -290,18 +322,19 @@ class DownloadService : Service() {
             ?: throw IOException("Cannot create the target file")
         val startOffset = if (resume) DownloadLocations.fileLength(this, uri) else 0L
 
+        val headers = safeHeaders(record.headers)
         val request = Request.Builder()
             .url(record.linkUrl)
-            .headers(record.headers.toHeaders())
+            .headers(headers.toHeaders())
             .apply {
-                if (record.headers.keys.none { it.equals("user-agent", ignoreCase = true) }) {
+                if (headers.keys.none { it.equals("user-agent", ignoreCase = true) }) {
                     header("User-Agent", USER_AGENT)
                 }
                 if (startOffset > 0) header("Range", "bytes=$startOffset-")
             }
             .build()
 
-        client.newCall(request).execute().use { response ->
+        clientFor(record).newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             val contentLength = response.body?.contentLength() ?: -1L
             val partial = response.code == 206
@@ -357,7 +390,7 @@ class DownloadService : Service() {
             ?: throw IOException("Cannot create the target file")
 
         val playlistUrl = record.linkUrl
-        var text = fetchText(playlistUrl, record.headers)
+        var text = fetchText(playlistUrl, record)
         if (text.contains("#EXT-X-STREAM-INF")) {
             // Master playlist: follow the widest-bandwidth variant.
             val lines = text.lines().filter { it.isNotBlank() }
@@ -372,7 +405,7 @@ class DownloadService : Service() {
                 }
             }
             val variant = best?.second ?: throw IOException("No variant in the master playlist")
-            text = fetchText(absolute(playlistUrl, variant), record.headers)
+            text = fetchText(absolute(playlistUrl, variant), record)
         }
 
         var mediaSequence = 0L
@@ -408,9 +441,9 @@ class DownloadService : Service() {
             while (index < segments.size) {
                 checkAlive(job)
                 val segment = segments[index]
-                var bytes = fetchBytes(segment.url, record.headers)
+                var bytes = fetchBytes(segment.url, record)
                 segment.key?.let { (keyUrl, ivHex) ->
-                    val keyBytes = fetchBytes(keyUrl, record.headers)
+                    val keyBytes = fetchBytes(keyUrl, record)
                     val iv = if (ivHex.isNotBlank()) {
                         ivHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
                     } else {
@@ -438,10 +471,53 @@ class DownloadService : Service() {
         }
     }
 
+    /** Saves the provider's subtitle beside the video, same folder, same name. */
+    private fun downloadSubtitle(id: String) {
+        val record = DownloadStore.find(this, id) ?: return
+        try {
+            val subUrl = record.subUrl ?: return
+            val bytes = fetchBytes(subUrl, record)
+            val ext = subUrl.substringBefore('?').substringAfterLast('.', "").lowercase()
+            val safeExt = if (ext in setOf("srt", "ass", "ssa", "vtt", "ttml")) ext else "vtt"
+            val mime = when (safeExt) {
+                "srt" -> "application/x-subrip"
+                "ass", "ssa" -> "text/x-ssa"
+                "ttml" -> "application/ttml+xml"
+                else -> "text/vtt"
+            }
+            val subName = record.fileName.substringBeforeLast('.') + "." + safeExt
+            val folder = record.folderUri ?: DownloadLocations.resolveFolder(this, record) ?: return
+
+            val uri: String? = if (folder.startsWith("content://")) {
+                val folderDoc = DocumentFile.fromSingleUri(this, Uri.parse(folder))
+                folderDoc?.findFile(subName)?.delete()
+                val doc = folderDoc?.createFile(mime, subName.substringBeforeLast('.'))
+                if (doc != null) {
+                    DownloadLocations.openOutput(this, doc.uri.toString(), append = false).use { it.write(bytes) }
+                    doc.uri.toString()
+                } else {
+                    null
+                }
+            } else {
+                val dir = File(Uri.parse(folder).path!!)
+                dir.mkdirs()
+                val file = File(dir, subName)
+                file.delete()
+                file.writeBytes(bytes)
+                Uri.fromFile(file).toString()
+            }
+            if (uri != null) {
+                DownloadStore.update(this, id) { it.copy(subtitleUri = uri) }
+            }
+        } catch (_: Throwable) {
+            // A missing subtitle never fails the video download.
+        }
+    }
+
     private fun downloadPoster(id: String) {
         val record = DownloadStore.find(this, id) ?: return
         try {
-            val bytes = fetchBytes(record.posterUrl ?: return, record.posterHeaders ?: emptyMap())
+            val bytes = fetchBytes(record.posterUrl ?: return, record)
             // Thumbnails live in the app's own storage; the user's download
             // folder holds only video files.
             val dir = File(filesDir, "download_posters").apply { mkdirs() }
@@ -454,10 +530,10 @@ class DownloadService : Service() {
 
     // ---- small helpers ----
 
-    private fun requestFor(url: String, headers: Map<String, String>): Request =
+    private fun requestFor(url: String, http: OkHttpClient, headers: Map<String, String>): Request =
         Request.Builder()
             .url(url)
-            .headers(headers.toHeaders())
+            .headers(safeHeaders(headers).toHeaders())
             .apply {
                 if (headers.keys.none { it.equals("user-agent", ignoreCase = true) }) {
                     header("User-Agent", USER_AGENT)
@@ -465,14 +541,14 @@ class DownloadService : Service() {
             }
             .build()
 
-    private fun fetchText(url: String, headers: Map<String, String>): String =
-        client.newCall(requestFor(url, headers)).execute().use { response ->
+    private fun fetchText(url: String, record: DownloadStore.Download): String =
+        clientFor(record).newCall(requestFor(url, clientFor(record), record.headers)).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             response.body?.string() ?: throw IOException("Empty body")
         }
 
-    private fun fetchBytes(url: String, headers: Map<String, String>): ByteArray =
-        client.newCall(requestFor(url, headers)).execute().use { response ->
+    private fun fetchBytes(url: String, record: DownloadStore.Download): ByteArray =
+        clientFor(record).newCall(requestFor(url, clientFor(record), record.headers)).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             response.body?.bytes() ?: throw IOException("Empty body")
         }
