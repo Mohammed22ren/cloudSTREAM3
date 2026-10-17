@@ -70,25 +70,14 @@ object DownloadMigration {
             val resolver = context.contentResolver
             val source = Uri.parse(sourceUri)
             val targetFolder = Uri.parse(folderUri)
-            val treeUri = DocumentsContract.getTreeUri(targetFolder)
-            val targetParent = if (treeUri != null) {
-                DocumentsContract.buildDocumentUriUsingTree(
-                    treeUri,
-                    DocumentsContract.getTreeDocumentId(targetFolder),
-                )
-            } else {
-                targetFolder
-            }
-            val sourceParent = DocumentsContract.getDocumentId(source)?.let { id ->
-                // The parent of a pre-migration file is the location root.
-                DocumentsContract.buildDocumentUriUsingTree(
-                    DocumentsContract.getTreeUri(source),
-                    DocumentsContract.getTreeDocumentId(source),
-                )
-            } ?: targetParent
-
+            // Pre-migration files sat directly in the location, so their
+            // parent is the tree's root document.
+            val sourceRoot = DocumentsContract.buildDocumentUriUsingTree(
+                source,
+                DocumentsContract.getTreeDocumentId(source),
+            )
             try {
-                val movedUri = DocumentsContract.moveDocument(resolver, source, sourceParent, targetParent)
+                val movedUri = DocumentsContract.moveDocument(resolver, source, sourceRoot, targetFolder)
                 if (movedUri != null) return movedUri.toString()
             } catch (_: Throwable) {
                 // Not movable in place: copy then delete below.
