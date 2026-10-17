@@ -165,10 +165,10 @@ class PlayerViewModel(val args: PlayerArgs) : ViewModel() {
             )
             // A subtitle downloaded beside the video, if the provider had one.
             args.offlineSubtitleUri?.let { subUri ->
+                @Suppress("DEPRECATION")
                 val sub = SubtitleFile(
-                    lang = args.subtitle ?: args.offlineSubtitleUri ?: "Subtitle",
+                    lang = args.subtitle ?: "Subtitle",
                     url = subUri,
-                    headers = emptyMap(),
                 )
                 _subtitles.value = listOf(sub)
                 _selectedSubtitle.value = sub
