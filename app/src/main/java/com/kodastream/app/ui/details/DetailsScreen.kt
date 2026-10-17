@@ -204,6 +204,7 @@ fun DetailsScreen(
             onBack = onBack,
             onOpenItem = onOpenItem,
             onPlay = onPlay,
+            onOpenDownloads = onOpenDownloads,
         )
     }
 }
@@ -323,6 +324,7 @@ private fun DetailsContent(
     onBack: () -> Unit,
     onOpenItem: (SearchResponse) -> Unit,
     onPlay: (PlayerArgs) -> Unit,
+    onOpenDownloads: () -> Unit,
 ) {
     val episodesByDub = remember(response) { episodesOf(response) }
     val dubOptions = remember(episodesByDub) { episodesByDub.keys.toList() }
