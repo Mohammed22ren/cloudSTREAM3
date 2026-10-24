@@ -229,3 +229,8 @@ fabric.properties
 !/gradle/wrapper/gradle-wrapper.jar
 
 # End of https://www.toptal.com/developers/gitignore/api/kotlin,java,android,androidstudio,visualstudiocode
+
+# Local reference material, not part of the app
+/cloudstream-master/
+/graphify-out/
+/pi-session-*.html
