@@ -32,6 +32,9 @@ captures/
 .cxx/
 *.apk
 output.json
+*.jks
+*.keystore
+keystore.properties
 
 # IntelliJ
 *.iml

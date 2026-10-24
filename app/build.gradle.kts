@@ -24,6 +24,20 @@ android {
         versionName = "0.1.0"
     }
 
+    // CI decodes the stable release keystore from secrets; without it (local
+    // builds, forks) fall back to the debug key.
+    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { file(it).exists() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Extensions (.cs3 files) are linked against the engine's class and
@@ -31,9 +45,11 @@ android {
             // stays OFF (CloudStream itself ships the same way).
             isMinifyEnabled = false
             isShrinkResources = false
-            // First builds are signed with the debug key so the APK installs
-            // straight away. Swap in a real keystore before publishing.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeystore != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isMinifyEnabled = false
