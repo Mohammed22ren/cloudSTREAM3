@@ -1,6 +1,5 @@
 package com.kodastream.app.ui.settings
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -45,7 +44,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kodastream.app.BuildConfig
 import com.kodastream.app.R
-import androidx.documentfile.provider.DocumentFile
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DownloadLocations
 import com.kodastream.app.ui.theme.APP_PALETTES
@@ -71,15 +69,7 @@ fun SettingsScreen(
     var downloadLocation by remember { mutableStateOf(DownloadLocations.readableLocation(context)) }
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-            } catch (_: SecurityException) {
-            }
-            if (DocumentFile.fromTreeUri(context, uri)?.canWrite() == true) {
-                AppPrefs.setDownloadTreeUri(context, uri.toString())
+            if (DownloadLocations.adoptTree(context, uri)) {
                 downloadLocation = DownloadLocations.readableLocation(context)
             } else {
                 Toast.makeText(context, R.string.download_folder_invalid, Toast.LENGTH_SHORT).show()

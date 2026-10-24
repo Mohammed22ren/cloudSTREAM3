@@ -1,6 +1,7 @@
 package com.kodastream.app.data
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
@@ -156,6 +157,20 @@ object DownloadLocations {
             return null
         }
         return tree
+    }
+
+    /** Takes write access to a user-picked folder and stores it; false when it is not writable. */
+    fun adoptTree(context: Context, uri: Uri): Boolean {
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        } catch (_: SecurityException) {
+        }
+        if (DocumentFile.fromTreeUri(context, uri)?.canWrite() != true) return false
+        AppPrefs.setDownloadTreeUri(context, uri.toString())
+        return true
     }
 
     /** What the settings row shows: the picked folder's name, or the default path. */

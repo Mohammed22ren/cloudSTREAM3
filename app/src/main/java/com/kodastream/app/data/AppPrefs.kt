@@ -1,7 +1,9 @@
 package com.kodastream.app.data
 
 import android.content.Context
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
+import androidx.core.os.LocaleListCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,10 +22,13 @@ object AppPrefs {
     private const val KEY_DL_SERVER = "download_last_server"
     private const val KEY_DL_FOLDERS_DONE = "download_folders_migrated"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+    private const val KEY_SETUP_DONE = "setup_done"
+    private const val KEY_APP_LANGUAGE = "app_language"
     private const val POSITION_PREFIX = "pos_"
 
     const val NAV_SIDE = "side"
     const val NAV_BOTTOM = "bottom"
+    const val LANGUAGE_SYSTEM = "system"
 
     private val _navPosition = MutableStateFlow<String?>(null)
 
@@ -118,5 +123,31 @@ object AppPrefs {
 
     fun setPosition(context: Context, key: String, positionMs: Long) {
         prefs(context).edit { putLong(POSITION_PREFIX + key.hashCode(), positionMs) }
+    }
+
+    // ---- First-run setup ----
+
+    fun setupDone(context: Context): Boolean = prefs(context).getBoolean(KEY_SETUP_DONE, false)
+
+    fun setSetupDone(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(KEY_SETUP_DONE, value) }
+    }
+
+    /** "system" or a BCP 47 language tag such as "en" / "ar". */
+    fun appLanguage(context: Context): String =
+        prefs(context).getString(KEY_APP_LANGUAGE, null) ?: LANGUAGE_SYSTEM
+
+    fun setAppLanguage(context: Context, tag: String) {
+        prefs(context).edit { putString(KEY_APP_LANGUAGE, tag) }
+    }
+
+    /** Applies the saved language; called from Application before any activity exists. */
+    fun applyAppLanguage(context: Context) {
+        val locales = appLanguage(context).takeIf { it != LANGUAGE_SYSTEM }
+            ?.let { LocaleListCompat.forLanguageTags(it) }
+            ?: LocaleListCompat.getEmptyLocaleList()
+        if (AppCompatDelegate.getApplicationLocales() != locales) {
+            AppCompatDelegate.setApplicationLocales(locales)
+        }
     }
 }

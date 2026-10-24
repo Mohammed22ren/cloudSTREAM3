@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import com.kodastream.app.BuildConfig
+import com.kodastream.app.data.AppPrefs
 import com.lagradost.api.setContext
 import com.lagradost.cloudstream3.network.initClient
 import com.lagradost.cloudstream3.utils.AppDebug
@@ -28,6 +29,8 @@ class CloudStreamApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppDebug.isDebug = BuildConfig.DEBUG
+        // Per-app language must be set before the first activity is created.
+        AppPrefs.applyAppLanguage(this)
         // The network clients must exist before any extension runs.
         app.initClient(this)
         insecureApp.initClient(this, true)

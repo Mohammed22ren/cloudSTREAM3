@@ -6,16 +6,22 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.kodastream.app.data.AppEvents
+import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DownloadStore
 import com.kodastream.app.downloads.DownloadMigration
 import com.kodastream.app.downloads.DownloadService
 import com.kodastream.app.engine.AppBootstrap
 import com.kodastream.app.ui.AppRoot
+import com.kodastream.app.ui.setup.SetupWizard
 import com.kodastream.app.ui.theme.KodaStreamTheme
 import com.kodastream.app.ui.theme.ThemeMode
 import com.kodastream.app.ui.theme.ThemeViewModel
@@ -47,6 +53,7 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             val themeViewModel: ThemeViewModel = viewModel()
+            var setupDone by remember { mutableStateOf(AppPrefs.setupDone(this@MainActivity)) }
             val dark = when (themeViewModel.mode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
@@ -58,7 +65,16 @@ class MainActivity : AppCompatActivity() {
                 amoledDark = themeViewModel.amoled,
                 paletteStyle = themeViewModel.style,
             ) {
-                AppRoot(themeViewModel)
+                if (setupDone) {
+                    AppRoot(themeViewModel)
+                } else {
+                    SetupWizard(themeViewModel) { language ->
+                        AppPrefs.setSetupDone(this@MainActivity, true)
+                        AppPrefs.setAppLanguage(this@MainActivity, language)
+                        AppPrefs.applyAppLanguage(this@MainActivity)
+                        setupDone = true
+                    }
+                }
             }
         }
     }

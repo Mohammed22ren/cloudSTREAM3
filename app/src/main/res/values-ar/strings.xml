@@ -2,6 +2,22 @@
 <resources>
     <string name="app_name">cloud3</string>
 
+    <!-- الإعداد الأولي -->
+    <string name="setup_tagline">اختيارات سريعة قبل البدء.</string>
+    <string name="setup_step_format">الخطوة %1$d من %2$d</string>
+    <string name="setup_next">التالي</string>
+    <string name="setup_start">ابدأ</string>
+    <string name="setup_language_title">اللغة</string>
+    <string name="setup_language_summary">اختر اللغة التي يستخدمها التطبيق.</string>
+    <string name="setup_language_system">افتراضي النظام</string>
+    <string name="setup_language_english">English</string>
+    <string name="setup_language_arabic">العربية</string>
+    <string name="setup_color_title">اللون</string>
+    <string name="setup_color_summary">اختر لون التطبيق الرئيسي. يمكنك ضبط المظهر لاحقًا من الإعدادات.</string>
+    <string name="setup_folder_title">مجلد التنزيلات</string>
+    <string name="setup_folder_summary">المكان الذي تُحفظ فيه الأفلام والحلقات التي تُنزّلها.</string>
+    <string name="setup_folder_note">يمكنك تغيير هذا لاحقًا من الإعدادات.</string>
+
     <!-- التنقل -->
     <string name="nav_home">الرئيسية</string>
     <string name="nav_search">البحث</string>
