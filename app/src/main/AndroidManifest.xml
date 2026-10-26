@@ -37,6 +37,17 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="cloudstreamrepo" />
             </intent-filter>
+
+            <!-- https://cs.repo?<repo url> does the same, like original CloudStream -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="cs.repo"
+                    android:pathPrefix="/" />
+            </intent-filter>
         </activity>
 
         <!-- Hosts the original CloudStream player UI. -->

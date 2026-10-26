@@ -20,8 +20,8 @@ android {
         // desugaring enabled below on anything older than API 33.
         minSdk = 26
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // CI decodes the stable release keystore from secrets; without it (local
@@ -112,6 +112,8 @@ tasks.withType<KotlinJvmCompile> {
 }
 
 dependencies {
+    testImplementation(libs.junit)
+
     coreLibraryDesugaring(libs.desugar.jdk.libs.nio) // NIO flavour needed by NewPipeExtractor
 
     // ---- The CloudStream engine (MainAPI, extractors, networking) ----

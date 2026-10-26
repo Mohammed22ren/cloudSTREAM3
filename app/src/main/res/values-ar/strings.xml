@@ -232,4 +232,14 @@
     <string name="player_switch_failed">تعذّر تحميل الحلقة</string>
     <string name="unable_to_inflate">تعذّر تحميل التخطيط</string>
     <string name="tv_no_focus_tag">tv_no_focus_tag</string>
+    <!-- نافذة التحديث -->
+    <string name="update_title">يتوفر تحديث</string>
+    <string name="update_versions">لديك %1$s · الأحدث %2$s</string>
+    <string name="update_whats_new">ما الجديد</string>
+    <string name="update_notes_fallback">يتوفر إصدار جديد من cloud3.</string>
+    <string name="update_button">تحديث</string>
+    <string name="update_donate">تبرّع</string>
+    <string name="update_later">لاحقاً</string>
+    <string name="update_dont_show">عدم الإظهار مرة أخرى</string>
+    <string name="update_link_failed">تعذّر فتح الرابط</string>
 </resources>

@@ -1,11 +1,13 @@
 package com.kodastream.app
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,7 +18,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.kodastream.app.data.AppEvents
 import com.kodastream.app.data.AppPrefs
+import com.kodastream.app.data.AppUpdate
 import com.kodastream.app.data.DownloadStore
+import com.kodastream.app.data.UpdateChecker
 import com.kodastream.app.downloads.DownloadMigration
 import com.kodastream.app.downloads.DownloadService
 import com.kodastream.app.engine.AppBootstrap
@@ -25,6 +29,7 @@ import com.kodastream.app.ui.setup.SetupWizard
 import com.kodastream.app.ui.theme.KodaStreamTheme
 import com.kodastream.app.ui.theme.ThemeMode
 import com.kodastream.app.ui.theme.ThemeViewModel
+import com.kodastream.app.ui.update.UpdateDialog
 import com.lagradost.cloudstream3.CommonActivity
 
 /**
@@ -54,10 +59,15 @@ class MainActivity : AppCompatActivity() {
         setContent {
             val themeViewModel: ThemeViewModel = viewModel()
             var setupDone by remember { mutableStateOf(AppPrefs.setupDone(this@MainActivity)) }
+            var update by remember { mutableStateOf<AppUpdate?>(null) }
             val dark = when (themeViewModel.mode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
+            }
+            // Throttled to once a day and silent on failure, so this is cheap.
+            LaunchedEffect(setupDone) {
+                if (setupDone) update = UpdateChecker.check(this@MainActivity)
             }
             KodaStreamTheme(
                 darkTheme = dark,
@@ -67,6 +77,29 @@ class MainActivity : AppCompatActivity() {
             ) {
                 if (setupDone) {
                     AppRoot(themeViewModel)
+                    update?.let { available ->
+                        UpdateDialog(
+                            update = available,
+                            currentVersion = BuildConfig.VERSION_NAME,
+                            onUpdate = {
+                                if (openLink(available.url)) {
+                                    update = null
+                                } else {
+                                    CommonActivity.showToast(R.string.update_link_failed)
+                                }
+                            },
+                            onDonate = {
+                                if (!openLink(DONATE_URL)) {
+                                    CommonActivity.showToast(R.string.update_link_failed)
+                                }
+                            },
+                            onLater = { update = null },
+                            onDontShowAgain = {
+                                AppPrefs.setSkippedUpdateVersion(this@MainActivity, available.version)
+                                update = null
+                            },
+                        )
+                    }
                 } else {
                     SetupWizard(themeViewModel) { language ->
                         AppPrefs.setSetupDone(this@MainActivity, true)
@@ -92,8 +125,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent?) {
         val link = intent?.data?.toString() ?: return
-        if (link.startsWith("cloudstreamrepo://")) {
+        if (link.startsWith("cloudstreamrepo://") || link.startsWith("https://cs.repo")) {
             AppEvents.pendingRepoUrl.value = link
         }
+    }
+
+    /** Opens an https link in the browser; false when nothing can handle it. */
+    private fun openLink(url: String): Boolean {
+        if (!url.startsWith("https://")) return false
+        return runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.isSuccess
+    }
+
+    private companion object {
+        const val DONATE_URL = "https://linktr.ee/x3onq"
     }
 }

@@ -360,4 +360,14 @@
 <string name="show_player_metadata_key">show_player_metadata_key</string>
 <string name="show_player_metadata_overlay">Show Player Metadata Overlay</string>
 <string name="torrent_not_supported">Torrent playback is not supported in this build</string>
+    <!-- App update dialog -->
+    <string name="update_title">Update available</string>
+    <string name="update_versions">You have %1$s · latest is %2$s</string>
+    <string name="update_whats_new">What\'s new</string>
+    <string name="update_notes_fallback">A new version of cloud3 is ready.</string>
+    <string name="update_button">Update</string>
+    <string name="update_donate">Donate</string>
+    <string name="update_later">Later</string>
+    <string name="update_dont_show">Don\'t show again</string>
+    <string name="update_link_failed">Could not open the link</string>
 </resources>

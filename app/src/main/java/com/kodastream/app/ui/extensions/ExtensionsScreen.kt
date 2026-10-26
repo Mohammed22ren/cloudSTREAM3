@@ -1,6 +1,7 @@
 package com.kodastream.app.ui.extensions
 
 import android.app.Application
+import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -149,24 +151,26 @@ class ExtensionsViewModel(application: Application) : AndroidViewModel(applicati
         selectRepo(url)
     }
 
-    fun addRepository(input: String, onAdded: () -> Unit) {
+    fun addRepository(input: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             val context = getApplication<Application>()
             val url = RepositoryManager.parseRepoUrl(input)
             if (url == null) {
                 toast(R.string.repo_invalid)
+                onResult(false)
                 return@launch
             }
             val parsed = RepositoryManager.parseRepository(url)
             if (parsed == null) {
                 toast(R.string.repo_unreadable)
+                onResult(false)
                 return@launch
             }
             PluginManager.addRepository(context, RepositoryData(parsed.name, url, parsed.iconUrl))
             _selectedRepo.value = null
             selectRepo(url)
             toast(R.string.repo_added, parsed.name)
-            onAdded()
+            onResult(true)
         }
     }
 
@@ -220,12 +224,25 @@ fun ExtensionsScreen(
     val updating by viewModel.updating.collectAsState()
     val revision by PluginManager.revision.collectAsState()
     val pendingRepo by AppEvents.pendingRepoUrl.collectAsState()
+    val context = LocalContext.current
 
     var tab by rememberSaveable { mutableStateOf(0) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var dialogText by rememberSaveable { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
 
-    // A cloudstreamrepo:// link opened from a browser lands here with the address filled in.
+    // Same as original CloudStream: a copied repo address is filled in for you.
+    val openAddDialog = {
+        val text = (context.getSystemService(ClipboardManager::class.java))
+            ?.primaryClip?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)?.text?.toString()?.trim()
+        // Shared repos arrive as "<name> : <url>"; the dialog only needs the url.
+        val copied = text?.substringAfterLast(" : ")?.trim()
+        if (!copied.isNullOrBlank()) dialogText = copied
+        showAddDialog = true
+    }
+
+    // A cloudstreamrepo:// or https://cs.repo link lands here with the address filled in.
     LaunchedEffect(pendingRepo) {
         val link = pendingRepo ?: return@LaunchedEffect
         dialogText = link
@@ -258,7 +275,7 @@ fun ExtensionsScreen(
                     Icon(Icons.Rounded.Refresh, contentDescription = stringResource(R.string.update_all))
                 }
             }
-            IconButton(onClick = { showAddDialog = true }) {
+            IconButton(onClick = openAddDialog) {
                 Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.add_repository))
             }
         }
@@ -297,7 +314,7 @@ fun ExtensionsScreen(
                     onRemoveRepo = viewModel::removeRepository,
                     onRetry = viewModel::refreshBrowse,
                     onInstall = viewModel::install,
-                    onAddRepo = { showAddDialog = true },
+                    onAddRepo = openAddDialog,
                     keyOf = viewModel::key,
                 )
             }
@@ -326,13 +343,18 @@ fun ExtensionsScreen(
             },
             confirmButton = {
                 Button(
-                    enabled = dialogText.isNotBlank(),
+                    enabled = dialogText.isNotBlank() && !adding,
                     onClick = {
-                        viewModel.addRepository(dialogText) {
-                            tab = 1
+                        adding = true
+                        viewModel.addRepository(dialogText) { added ->
+                            adding = false
+                            // A failed address keeps the dialog open so it can be fixed.
+                            if (added) {
+                                tab = 1
+                                showAddDialog = false
+                                dialogText = ""
+                            }
                         }
-                        showAddDialog = false
-                        dialogText = ""
                     },
                 ) { Text(stringResource(R.string.add)) }
             },

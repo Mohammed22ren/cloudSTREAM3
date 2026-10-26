@@ -24,6 +24,8 @@ object AppPrefs {
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_SETUP_DONE = "setup_done"
     private const val KEY_APP_LANGUAGE = "app_language"
+    private const val KEY_UPDATE_CHECK = "update_last_check"
+    private const val KEY_UPDATE_SKIPPED = "update_skipped_version"
     private const val POSITION_PREFIX = "pos_"
 
     const val NAV_SIDE = "side"
@@ -148,6 +150,25 @@ object AppPrefs {
             ?: LocaleListCompat.getEmptyLocaleList()
         if (AppCompatDelegate.getApplicationLocales() != locales) {
             AppCompatDelegate.setApplicationLocales(locales)
+        }
+    }
+
+    // ---- App updates ----
+
+    /** When the GitHub release check last completed, in epoch millis. */
+    fun lastUpdateCheck(context: Context): Long = prefs(context).getLong(KEY_UPDATE_CHECK, 0L)
+
+    fun setLastUpdateCheck(context: Context, timeMs: Long) {
+        prefs(context).edit { putLong(KEY_UPDATE_CHECK, timeMs) }
+    }
+
+    /** The version the user chose to stop being reminded about. */
+    fun skippedUpdateVersion(context: Context): String? =
+        prefs(context).getString(KEY_UPDATE_SKIPPED, null)
+
+    fun setSkippedUpdateVersion(context: Context, version: String?) {
+        prefs(context).edit {
+            if (version == null) remove(KEY_UPDATE_SKIPPED) else putString(KEY_UPDATE_SKIPPED, version)
         }
     }
 }
