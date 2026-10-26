@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Movie
@@ -31,7 +32,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,10 +42,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.SubcomposeAsyncImage
+import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.kodastream.app.R
 import com.lagradost.cloudstream3.SearchResponse
@@ -50,8 +56,8 @@ import com.lagradost.cloudstream3.SearchResponse
 /**
  * An image from a provider. Some sites only serve posters when the request
  * carries their own headers (referer, cookies), so those are forwarded.
- * While it loads the placeholder breathes with the shared skeleton pulse;
- * a missing poster falls back to a film icon on a tonal block.
+ * The placeholder is a flat tonal painter, not a subcomposition or a second
+ * animation: in a lazy list that keeps each poster to one drawable swap.
  */
 @Composable
 fun RemoteImage(
@@ -59,27 +65,36 @@ fun RemoteImage(
     headers: Map<String, String>?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
+    contentDescription: String? = null,
 ) {
     val context = LocalContext.current
-    Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+    val container = MaterialTheme.colorScheme.surfaceContainerHigh
+    val placeholder = remember(container) { ColorPainter(container) }
+    var failed by remember(url) { mutableStateOf(false) }
+    Box(
+        modifier = modifier.background(container),
+        contentAlignment = Alignment.Center,
+    ) {
         if (url.isNullOrBlank()) {
             PosterPlaceholder()
         } else {
-            val request = remember(url, headers) {
+            val request = remember(url, headers, context) {
                 ImageRequest.Builder(context)
                     .data(url)
                     .apply { headers?.forEach { (key, value) -> addHeader(key, value) } }
-                    .crossfade(true)
                     .build()
             }
-            SubcomposeAsyncImage(
+            AsyncImage(
                 model = request,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 contentScale = contentScale,
-                loading = { SkeletonBox(modifier = Modifier.fillMaxSize(), alpha = rememberSkeletonAlpha()) },
-                error = { PosterPlaceholder() },
+                placeholder = placeholder,
+                error = placeholder,
+                onSuccess = { failed = false },
+                onError = { failed = true },
                 modifier = Modifier.fillMaxSize(),
             )
+            if (failed) PosterPlaceholder()
         }
     }
 }
@@ -114,7 +129,7 @@ fun PosterCard(
     )
 }
 
-/** The card every list shares: a tonal surface, a breathing placeholder while
+/** The card every list shares: a tonal surface, a flat placeholder while
  *  the poster loads, a scrim rating badge that stays readable on any image,
  *  and a spring press that reads as physically pressing the card down. */
 @Composable
@@ -281,9 +296,12 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Black,
         color = MaterialTheme.colorScheme.onBackground,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = modifier
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+            .semantics { heading() },
     )
 }

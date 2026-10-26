@@ -64,6 +64,7 @@ axLifecycleViewModelCompose = "2.8.7"
 axComposeBom = "2026.09.00"
 axMaterial3 = "1.5.0-alpha29"
 axNavigationCompose = "2.8.5"
+axProfileInstaller = "1.4.1"
 axMedia3 = "1.9.3" # matches nextlib 1.9.3-0.12.0 and the ported CloudStream player
 axCoil = "2.7.0"
 axMaterialColors = "1.12.0"
@@ -182,10 +183,10 @@ ax-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref
 ax-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 ax-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 ax-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-ax-compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
 ax-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "axMaterial3" }
 ax-compose-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 ax-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "axNavigationCompose" }
+ax-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "axProfileInstaller" }
 ax-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "axMedia3" }
 ax-media3-exoplayer-dash = { group = "androidx.media3", name = "media3-exoplayer-dash", version.ref = "axMedia3" }
 ax-media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "axMedia3" }

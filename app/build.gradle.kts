@@ -20,8 +20,8 @@ android {
         // desugaring enabled below on anything older than API 33.
         minSdk = 26
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     // CI decodes the stable release keystore from secrets; without it (local
@@ -156,8 +156,9 @@ dependencies {
     implementation(libs.ax.compose.ui.graphics)
     implementation(libs.ax.compose.material3)
     implementation(libs.ax.compose.icons.extended)
-    implementation(libs.ax.compose.ui.text.google.fonts)
     implementation(libs.ax.navigation.compose)
+    // Installs the hand-written baseline profile on sideloaded builds.
+    implementation(libs.ax.profileinstaller)
     // HCT colour generation used by Koda's palette system
     implementation(libs.ax.material.colors)
     implementation(libs.ax.coil.compose)

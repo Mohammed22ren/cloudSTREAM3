@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,14 +20,19 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -42,8 +48,8 @@ import com.kodastream.app.ui.components.LoadingBox
 import com.kodastream.app.ui.components.PosterCard
 import com.kodastream.app.ui.components.PosterShelfSkeleton
 import com.kodastream.app.ui.components.SectionHeader
-import com.kodastream.app.ui.components.SkeletonTextLine
-import com.kodastream.app.ui.components.ThumbRowSkeleton
+import com.kodastream.app.ui.components.SkeletonBox
+import com.kodastream.app.ui.components.SkeletonPulseProvider
 import com.kodastream.app.ui.components.staggeredEnter
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
@@ -51,12 +57,16 @@ import com.lagradost.cloudstream3.plugins.PluginManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
+@Immutable
 data class HomeRow(
     val key: String,
     val title: String,
@@ -79,6 +89,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    /**
+     * The hero comes from the first shelf that has enough posters, preferring
+     * a portrait row. Derived here so composition never walks the shelves,
+     * and cached eagerly because the Home screen reads it right away.
+     */
+    val hero: StateFlow<List<SearchResponse>> = _rows
+        .map { rows ->
+            rows.sortedBy { it.horizontal }
+                .firstOrNull { row -> row.items.count { !it.posterUrl.isNullOrBlank() } >= 3 }
+                ?.items
+                .orEmpty()
+                .filter { !it.posterUrl.isNullOrBlank() }
+                .distinctBy { it.url }
+                .take(8)
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private var loadJob: Job? = null
 
@@ -175,6 +202,7 @@ fun HomeScreen(
     val providers by viewModel.providers.collectAsState()
     val selected by viewModel.selected.collectAsState()
     val rows by viewModel.rows.collectAsState()
+    val hero by viewModel.hero.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
     val startupDone by PluginManager.startupDone.collectAsState()
@@ -199,6 +227,7 @@ fun HomeScreen(
                     providers = providers,
                     selected = selected,
                     rows = rows,
+                    hero = hero,
                     loading = loading,
                     error = error,
                     contentPadding = contentPadding,
@@ -220,6 +249,7 @@ private fun HomeShelves(
     providers: List<MainAPI>,
     selected: String?,
     rows: List<HomeRow>,
+    hero: List<SearchResponse>,
     loading: Boolean,
     error: String?,
     contentPadding: PaddingValues,
@@ -230,17 +260,29 @@ private fun HomeShelves(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
-            top = contentPadding.calculateTopPadding() + 8.dp,
+            top = contentPadding.calculateTopPadding(),
             bottom = contentPadding.calculateBottomPadding() + 16.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item(key = "title") {
+            Text(
+                text = stringResource(R.string.home_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp)
+                    .semantics { heading() },
+            )
+        }
+
         item(key = "providers") {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(providers) { api ->
+                items(providers, key = { it.name }) { api ->
                     FilterChip(
                         selected = api.name == selected,
                         onClick = { onSelectProvider(api.name) },
@@ -250,28 +292,35 @@ private fun HomeShelves(
             }
         }
 
-        if (rows.isEmpty() && loading) {
-            // Placeholders at the shelf's real size and shape: the chrome
-            // (provider chips, headers) is already on screen and stays, only
-            // the blocked regions breathe.
-            item(key = "skeleton-1") {
-                Column {
-                    SkeletonTextLine(
-                        width = 140.dp,
-                        height = 20.dp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                    PosterShelfSkeleton()
-                }
+        if (hero.isNotEmpty()) {
+            item(key = "hero") {
+                HomeHero(items = hero, onOpen = onOpenItem)
             }
-            item(key = "skeleton-2") {
-                Column {
-                    SkeletonTextLine(
-                        width = 180.dp,
-                        height = 20.dp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                    ThumbRowSkeleton()
+        }
+
+        if (rows.isEmpty() && loading) {
+            // One hero-sized placeholder at the carousel's real height, then a
+            // shelf: the chrome is already on screen and stays put.
+            item(key = "skeleton") {
+                SkeletonPulseProvider {
+                    Column {
+                        SkeletonBox(
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .fillMaxWidth()
+                                .height(480.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        SkeletonBox(
+                            modifier = Modifier
+                                .padding(start = 16.dp)
+                                .size(width = 160.dp, height = 24.dp),
+                            shape = MaterialTheme.shapes.small,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        PosterShelfSkeleton()
+                    }
                 }
             }
         } else if (rows.isEmpty()) {
@@ -286,31 +335,23 @@ private fun HomeShelves(
             }
         }
 
-        itemsIndexed(rows, key = { _, row -> row.key }) { index, row ->
-            // Each shelf enters once, a step later than the one above it;
-            // the delay is capped so shelves far down the list are not
-            // waiting behind shelves that are not even visible yet.
-            val entrance = remember { MutableTransitionState(false).apply { targetState = true } }
-            AnimatedVisibility(
-                visibleState = entrance,
-                enter = staggeredEnter(index.coerceAtMost(8)),
-            ) {
-                Column {
-                    SectionHeader(row.title)
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        // No keys here: providers sometimes return the same item twice.
-                        items(row.items) { item ->
-                            PosterCard(
-                                item = item,
-                                horizontal = row.horizontal,
-                                onClick = { onOpenItem(item) },
-                            )
-                        }
-                    }
+        itemsIndexed(
+            items = rows,
+            key = { _, row -> row.key },
+            contentType = { _, _ -> "shelf" },
+        ) { index, row ->
+            // The first three shelves rise in once; later ones just appear, and
+            // a provider switch reuses the already-settled rows.
+            if (index < 3) {
+                val entrance = remember { MutableTransitionState(false).apply { targetState = true } }
+                AnimatedVisibility(
+                    visibleState = entrance,
+                    enter = staggeredEnter(index),
+                ) {
+                    Shelf(row = row, onOpenItem = onOpenItem)
                 }
+            } else {
+                Shelf(row = row, onOpenItem = onOpenItem)
             }
         }
 
@@ -319,6 +360,32 @@ private fun HomeShelves(
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     LoadingIndicator(Modifier.size(32.dp))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Shelf(
+    row: HomeRow,
+    onOpenItem: (SearchResponse) -> Unit,
+) {
+    Column {
+        SectionHeader(row.title)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // No keys here: providers sometimes return the same item twice.
+            items(
+                items = row.items,
+                contentType = { if (row.horizontal) "horizontal" else "poster" },
+            ) { item ->
+                PosterCard(
+                    item = item,
+                    horizontal = row.horizontal,
+                    onClick = { onOpenItem(item) },
+                )
             }
         }
     }

@@ -14,6 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.Coil
+import coil.ImageLoader
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.kodastream.app.data.AppEvents
@@ -42,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         CommonActivity.setActivityInstance(this)
+        installImageLoader()
         AppBootstrap.start(this)
         handleIntent(intent)
 
@@ -138,7 +143,36 @@ class MainActivity : AppCompatActivity() {
         }.isSuccess
     }
 
+    /**
+     * One image loader for the whole process. Provider posters rarely send
+     * useful cache headers, so they are cached by URL instead of being
+     * re-fetched on every shelf; the crossfade lives here so individual
+     * requests stay identical and Coil can skip it on memory-cache hits.
+     */
+    private fun installImageLoader() {
+        if (imageLoaderInstalled) return
+        imageLoaderInstalled = true
+        Coil.setImageLoader(
+            ImageLoader.Builder(applicationContext)
+                .memoryCache {
+                    MemoryCache.Builder(applicationContext)
+                        .maxSizePercent(0.20)
+                        .build()
+                }
+                .diskCache {
+                    DiskCache.Builder()
+                        .directory(cacheDir.resolve("image_cache"))
+                        .maxSizeBytes(256L * 1024 * 1024)
+                        .build()
+                }
+                .respectCacheHeaders(false)
+                .crossfade(150)
+                .build()
+        )
+    }
+
     private companion object {
         const val DONATE_URL = "https://linktr.ee/x3onq"
+        var imageLoaderInstalled = false
     }
 }

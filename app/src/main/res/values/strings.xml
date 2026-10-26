@@ -370,4 +370,28 @@
     <string name="update_later">Later</string>
     <string name="update_dont_show">Don\'t show again</string>
     <string name="update_link_failed">Could not open the link</string>
+    <!-- Home and details redesign -->
+    <string name="home_title">KodaStream</string>
+    <string name="type_movie">Movie</string>
+    <string name="type_series">Series</string>
+    <string name="type_anime">Anime</string>
+    <string name="type_cartoon">Cartoon</string>
+    <string name="resume">Resume</string>
+    <string name="minutes_left">%1$d min left</string>
+    <string name="action_favorite">Favorite</string>
+    <string name="action_watchlist">Watchlist</string>
+    <string name="action_trailer">Trailer</string>
+    <string name="action_share">Share</string>
+    <string name="downloading">Downloading</string>
+    <string name="mark_watched">Mark watched</string>
+    <string name="cast_title">Cast</string>
+    <string name="trailers_title">Trailers</string>
+    <string name="trailer_n">Trailer %1$d</string>
+    <string name="more">More</string>
+    <string name="show_less">Show less</string>
+    <string name="share">Share</string>
+    <string name="share_text">%1$s — %2$s</string>
+    <string name="cd_share">Share</string>
+    <string name="cd_poster">Poster for %1$s</string>
+    <string name="cd_trailer">Play trailer %1$d</string>
 </resources>

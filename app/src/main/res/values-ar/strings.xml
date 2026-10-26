@@ -242,4 +242,28 @@
     <string name="update_later">لاحقاً</string>
     <string name="update_dont_show">عدم الإظهار مرة أخرى</string>
     <string name="update_link_failed">تعذّر فتح الرابط</string>
+    <!-- تصميم الرئيسية والتفاصيل -->
+    <string name="home_title">KodaStream</string>
+    <string name="type_movie">فيلم</string>
+    <string name="type_series">مسلسل</string>
+    <string name="type_anime">أنمي</string>
+    <string name="type_cartoon">كرتون</string>
+    <string name="resume">متابعة</string>
+    <string name="minutes_left">بقيت %1$d د</string>
+    <string name="action_favorite">المفضلة</string>
+    <string name="action_watchlist">المشاهدة لاحقًا</string>
+    <string name="action_trailer">الإعلان</string>
+    <string name="action_share">مشاركة</string>
+    <string name="downloading">جارٍ التنزيل</string>
+    <string name="mark_watched">تحديد كمشاهد</string>
+    <string name="cast_title">طاقم العمل</string>
+    <string name="trailers_title">الإعلانات</string>
+    <string name="trailer_n">الإعلان %1$d</string>
+    <string name="more">المزيد</string>
+    <string name="show_less">عرض أقل</string>
+    <string name="share">مشاركة</string>
+    <string name="share_text">%1$s — %2$s</string>
+    <string name="cd_share">مشاركة</string>
+    <string name="cd_poster">ملصق %1$s</string>
+    <string name="cd_trailer">تشغيل الإعلان %1$d</string>
 </resources>
