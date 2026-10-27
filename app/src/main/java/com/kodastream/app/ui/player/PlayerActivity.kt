@@ -2,10 +2,21 @@ package com.kodastream.app.ui.player
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.WindowManager
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DownloadStore
 import com.kodastream.app.data.HistoryStore
@@ -47,9 +58,18 @@ class PlayerActivity : AppCompatActivity() {
             handler.postDelayed(this, 5_000L)
         }
     }
+    private val hideBars = Runnable { hideSystemBars() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
+        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
+        applyCutoutMode()
+        hideSystemBars()
+        installInsetsListener()
         CommonActivity.setActivityInstance(this)
         AppBootstrap.start(this)
 
@@ -85,19 +105,73 @@ class PlayerActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         CommonActivity.setActivityInstance(this)
+        hideSystemBars()
         handler.removeCallbacks(progressTicker)
         handler.post(progressTicker)
     }
 
     override fun onPause() {
         handler.removeCallbacks(progressTicker)
+        handler.removeCallbacks(hideBars)
         recordProgress()
         super.onPause()
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            applyCutoutMode()
+            hideSystemBars()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyCutoutMode()
+        hideSystemBars()
+    }
+
     override fun onDestroy() {
         handler.removeCallbacks(progressTicker)
+        handler.removeCallbacks(hideBars)
         super.onDestroy()
+    }
+
+    /** Keeps the player fully immersive; the system bars only peek transiently on a swipe. */
+    private fun hideSystemBars() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /** Re-applies shortEdges after the ported player resets the cutout mode on its own exits. */
+    private fun applyCutoutMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val params = window.attributes
+            params.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            window.attributes = params
+        }
+    }
+
+    /**
+     * The ported player shows the system bars on some transitions. Hide them
+     * again after a short delay, which still leaves the system's transient
+     * swipe-to-peek behavior usable.
+     */
+    private fun installInsetsListener() {
+        val content = findViewById<android.view.View>(android.R.id.content) ?: return
+        ViewCompat.setOnApplyWindowInsetsListener(content) { _, insets ->
+            if (insets.isVisible(WindowInsetsCompat.Type.systemBars())) {
+                handler.removeCallbacks(hideBars)
+                handler.postDelayed(hideBars, 2_000L)
+            } else {
+                handler.removeCallbacks(hideBars)
+            }
+            insets
+        }
     }
 
     /** Mirrors the fragment's position into Koda's history and per-episode prefs. */

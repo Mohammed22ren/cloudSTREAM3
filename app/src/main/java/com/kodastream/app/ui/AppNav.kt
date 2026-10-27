@@ -60,7 +60,6 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -72,12 +71,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.app.Application
@@ -252,24 +249,15 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
         )
     }
 
-    // The app keeps its locale direction everywhere; the side bar is pinned
-    // to the left even in Arabic, so only its slot is LTR.
-    val contentDirection = LocalLayoutDirection.current
-
     if (sideMode) {
         Box(Modifier.fillMaxSize()) {
-            // The content shifts clear of the bar's strip: from the left
-            // edge in LTR locales, and from the same left edge in RTL via
-            // `end` (which in RTL is the left side). The bar floats on top.
-            val contentShift = if (contentDirection == LayoutDirection.Ltr) {
-                Modifier.padding(start = SideBarWidth + SideBarMargin)
-            } else {
-                Modifier.padding(end = SideBarWidth + SideBarMargin)
-            }
+            // The bar mirrors with the locale: left in LTR, right in Arabic.
+            // `start` on both the content padding and the bar keeps them on
+            // the same side without direction-dependent branches.
             Box(
                 Modifier
                     .fillMaxSize()
-                    .then(contentShift)
+                    .padding(start = SideBarWidth + SideBarMargin)
             ) {
                 AppNavGraph(
                     navController = navController,
@@ -280,20 +268,18 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
                 )
             }
 
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                FloatingSideBar(
-                    selectedRoute = route,
-                    onSelect = { navController.navigateTopLevel(it) },
-                    sourceVisible = sourceVisible,
-                    onOpenSources = { sourceSheetOpen = true },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
-                        .displayCutoutPadding()
-                        .padding(start = SideBarMargin),
-                )
-            }
+            FloatingSideBar(
+                selectedRoute = route,
+                onSelect = { navController.navigateTopLevel(it) },
+                sourceVisible = sourceVisible,
+                onOpenSources = { sourceSheetOpen = true },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .displayCutoutPadding()
+                    .padding(start = SideBarMargin),
+            )
         }
     } else {
         Box(Modifier.fillMaxSize()) {
@@ -440,11 +426,12 @@ private fun AppNavGraph(
 }
 
 /**
- * The floating side pill: a stadium-ended vertical bar centered on the
- * left edge, wrapping its content, over the page rather than attached to
- * it. Same five destinations, same icons, same order as the bottom bar.
- * Scrollable for short screens in landscape; the insets in [modifier]'s
- * chain cap its height to the space between the status and nav bars.
+ * The floating side pill: a stadium-ended vertical bar on the start edge
+ * (left in LTR, right in Arabic), wrapping its content, over the page
+ * rather than attached to it. Same five destinations, same icons, same
+ * order as the bottom bar. Scrollable for short screens in landscape; the
+ * insets in [modifier]'s chain cap its height to the space between the
+ * status and nav bars.
  */
 @Composable
 private fun FloatingSideBar(

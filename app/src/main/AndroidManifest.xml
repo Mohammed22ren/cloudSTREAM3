@@ -56,7 +56,7 @@
             android:exported="false"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true"
-            android:theme="@style/Theme.KodaStream"
+            android:theme="@style/Theme.KodaStream.Player"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|density" />
 
         <!-- Keeps downloads running when the app is closed. -->

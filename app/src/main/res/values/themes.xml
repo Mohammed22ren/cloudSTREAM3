@@ -27,4 +27,20 @@
         <item name="black">@color/black</item>
         <item name="focusBackground">?android:attr/selectableItemBackground</item>
     </style>
+
+    <!--
+        The player is always dark and edge-to-edge, independent of the in-app
+        theme. The version-qualified variants add the API 28 cutout mode and
+        the API 29 navigation-bar contrast opt-out; this base stays valid on
+        minSdk 26.
+    -->
+    <style name="Theme.KodaStream.Player.Base" parent="Theme.KodaStream">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+
+    <style name="Theme.KodaStream.Player" parent="Theme.KodaStream.Player.Base" />
 </resources>

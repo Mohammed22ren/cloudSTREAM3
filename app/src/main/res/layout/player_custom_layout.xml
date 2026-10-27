@@ -550,7 +550,8 @@
                 <LinearLayout
                     android:id="@+id/download_both_header"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="match_parent"
+                    android:visibility="gone">
 
                     <FrameLayout
                         android:layout_width="match_parent"
