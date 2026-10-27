@@ -41,14 +41,23 @@ import kotlinx.coroutines.launch
 
 /**
  * Activity-scoped source state, shared by Home, Search and the navigation
- * shell's source button. Home's selection stays authoritative: HomeViewModel
- * reports its fallback here, and a choice made here asks it to switch.
+ * shell's source button, and the one owner of the Home selection.
+ *
+ * [home] is the effective provider Home loads; [selectHome] is the only write.
+ * The resolver never persists a fallback, so the saved choice survives a
+ * provider that loads late or disappears.
  */
 class SourceViewModel(application: Application) : AndroidViewModel(application) {
-    private val _providers = MutableStateFlow<List<MainAPI>>(emptyList())
+    private val _providers = MutableStateFlow(Engine.providers())
     val providers: StateFlow<List<MainAPI>> = _providers.asStateFlow()
 
-    private val _home = MutableStateFlow(AppPrefs.selectedProvider(application))
+    /** The user's persisted choice. Never overwritten by a fallback. */
+    private var saved = AppPrefs.selectedProvider(application)
+
+    /** Set only by a tap in this session, so a restart always trusts [saved]. */
+    private var picked: String? = null
+
+    private val _home = MutableStateFlow<String?>(null)
     val home: StateFlow<String?> = _home.asStateFlow()
 
     /** null means every provider, the same meaning the Search chips had. */
@@ -56,23 +65,38 @@ class SourceViewModel(application: Application) : AndroidViewModel(application) 
     val search: StateFlow<String?> = _search.asStateFlow()
 
     init {
+        resolveHome()
         viewModelScope.launch {
             PluginManager.revision.collect {
                 val all = Engine.providers()
                 _providers.value = all
                 val search = _search.value
                 if (search != null && all.none { it.name == search }) _search.value = null
+                resolveHome()
             }
         }
     }
 
-    fun reportHome(name: String?) {
-        if (_home.value != name) _home.value = name
+    private fun resolveHome() {
+        val available = _providers.value.filter { it.hasMainPage }.map { it.name }
+        val next = resolveHomeSource(
+            saved = saved,
+            current = _home.value,
+            userPicked = picked != null && picked == _home.value,
+            available = available,
+            startupDone = PluginManager.startupDone.value,
+        )
+        if (next != _home.value) _home.value = next
     }
 
+    /** A tap in the Home sheet; the only place that changes the saved source. */
     fun selectHome(name: String) {
-        _home.value = name
+        val api = Engine.provider(name) ?: return
+        if (!api.hasMainPage) return
+        picked = name
+        saved = name
         AppPrefs.setSelectedProvider(getApplication(), name)
+        if (_home.value != name) _home.value = name
     }
 
     fun selectSearch(name: String?) {
@@ -125,9 +149,13 @@ fun SourceSheet(
                         }
                     }
                     items(providers, key = { it.name }) { api ->
+                        // Search can use every provider; Home needs a main page.
+                        val canFillHome = showAllSources || api.hasMainPage
                         SourceRow(
                             name = api.name,
                             selected = selected == api.name,
+                            supporting = if (canFillHome) null else stringResource(R.string.source_no_home),
+                            enabled = canFillHome,
                             onClick = { onSelect(api.name) },
                         )
                     }
@@ -141,20 +169,23 @@ fun SourceSheet(
 private fun SourceRow(
     name: String,
     selected: Boolean,
+    supporting: String? = null,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = MaterialTheme.shapes.medium,
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
             Color.Transparent
         },
-        contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurface
+        contentColor = when {
+            selected -> MaterialTheme.colorScheme.onPrimaryContainer
+            !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+            else -> MaterialTheme.colorScheme.onSurface
         },
         modifier = Modifier
             .fillMaxWidth()
@@ -165,13 +196,21 @@ private fun SourceRow(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (supporting != null) {
+                    Text(
+                        text = supporting,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             if (selected) {
                 Icon(Icons.Rounded.Check, contentDescription = null)
             }

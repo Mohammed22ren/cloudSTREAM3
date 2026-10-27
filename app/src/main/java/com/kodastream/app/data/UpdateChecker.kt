@@ -1,6 +1,7 @@
 package com.kodastream.app.data
 
 import android.content.Context
+import android.util.Log
 import com.kodastream.app.BuildConfig
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
@@ -14,52 +15,153 @@ data class AppUpdate(
     /** Version without the leading "v", for example "0.3.0". */
     val version: String,
     val notes: String?,
-    /** The APK asset when the release has one, otherwise its release page. */
+    /** The release's APK asset. */
     val url: String,
 )
 
+/** The decision-relevant fields of one GitHub release, with no Android types. */
+internal data class Release(
+    val tag: String,
+    val draft: Boolean,
+    val prerelease: Boolean,
+    val apkUrl: String?,
+    val notes: String?,
+)
+
+/** The release to offer, or the one-line reason there is none. */
+internal data class UpdateDecision(val update: AppUpdate?, val reason: String? = null)
+
 /**
- * Checks the project's GitHub releases at most once a day. Every failure is
- * silent: an app start must never wait on, or complain about, the network.
+ * Checks the project's official GitHub releases. A release found earlier is
+ * offered on every start without a network call; GitHub is asked again at most
+ * every six hours. Every failure is silent: an app start must never wait on,
+ * or complain about, the network.
  */
 object UpdateChecker {
+    private const val TAG = "UpdateChecker"
     private const val OWNER_REPO = "mo7AmMeD64/cloudSTREAM3"
     private const val LATEST_URL = "https://api.github.com/repos/$OWNER_REPO/releases/latest"
-    private const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
+    private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
 
+    /** CI publishes `build-<run>` tags; only `v1.2.3` is an official release. */
+    private val OFFICIAL_TAG = Regex("^v\\d+(?:\\.\\d+)*$")
+
+    /**
+     * The update to offer on this start, stored or freshly checked. Null means
+     * no dialog: nothing newer, a skipped version, or no usable response yet.
+     */
     suspend fun check(context: Context): AppUpdate? = withContext(Dispatchers.IO) {
+        val current = BuildConfig.VERSION_NAME
+        val skipped = AppPrefs.skippedUpdateVersion(context)
+        val stored = AppPrefs.storedUpdate(context)
         val now = System.currentTimeMillis()
-        if (now - AppPrefs.lastUpdateCheck(context) < CHECK_INTERVAL_MS) return@withContext null
 
-        val json = try {
-            val request = Request.Builder()
-                .url(LATEST_URL)
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/vnd.github+json")
-                .build()
-            app.baseClient.newCall(request).execute().use { response ->
-                // A rate limit or a server error also counts as a check, so a
-                // failing API is not retried on every single launch.
-                AppPrefs.setLastUpdateCheck(context, now)
-                if (!response.isSuccessful) return@withContext null
-                JSONObject(response.body?.string() ?: return@withContext null)
-            }
-        } catch (t: Throwable) {
-            // Offline or timed out: try again on the next start.
-            return@withContext null
+        if (now - AppPrefs.lastUpdateCheck(context) < CHECK_INTERVAL_MS) {
+            return@withContext storedDecision(stored, current, skipped, "throttled")
         }
 
-        val version = json.optString("tag_name").trim().removePrefix("v").removePrefix("V")
-        if (version.isBlank() || !isNewerVersion(version, BuildConfig.VERSION_NAME)) return@withContext null
-        if (AppPrefs.skippedUpdateVersion(context) == version) return@withContext null
+        val request = Request.Builder()
+            .url(LATEST_URL)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/vnd.github+json")
+            .apply { AppPrefs.updateEtag(context)?.let { header("If-None-Match", it) } }
+            .build()
 
-        val releaseUrl = json.optString("html_url").takeIf { it.startsWith("https://") } ?: return@withContext null
-        AppUpdate(
-            version = version,
-            notes = cleanNotes(json.optString("body")),
-            url = apkUrl(json) ?: releaseUrl,
-        )
+        val response = try {
+            app.baseClient.newCall(request).execute()
+        } catch (t: Throwable) {
+            return@withContext storedDecision(stored, current, skipped, "network error: ${t.message}")
+        }
+
+        response.use {
+            val code = response.code
+            if (!isSuccessfulCheck(code)) {
+                // Not a completed check: retry on the next start, keep any stored offer.
+                return@withContext storedDecision(stored, current, skipped, "HTTP $code")
+            }
+            AppPrefs.setLastUpdateCheck(context, now)
+
+            if (code == 304) {
+                return@withContext storedDecision(stored, current, skipped, "not modified")
+            }
+            if (code == 404) {
+                // No official release exists yet.
+                AppPrefs.setStoredUpdate(context, null)
+                AppPrefs.setUpdateEtag(context, null)
+                Log.d(TAG, "no dialog: no official release")
+                return@withContext null
+            }
+
+            val json = response.body?.string()?.let { runCatching { JSONObject(it) }.getOrNull() }
+            if (json == null) {
+                return@withContext storedDecision(stored, current, skipped, "empty or invalid JSON")
+            }
+
+            val decision = decide(release(json), current, skipped)
+            AppPrefs.setUpdateEtag(context, response.header("ETag"))
+            AppPrefs.setStoredUpdate(context, decision.update)
+            if (decision.update != null) {
+                Log.d(TAG, "offering ${decision.update.version}")
+            } else {
+                Log.d(TAG, "no dialog: ${decision.reason}")
+            }
+            decision.update
+        }
     }
+
+    /**
+     * A successful response. A 403, a 5xx or a network error must not move the
+     * last-checked time, so a failure is retried on the next start.
+     */
+    internal fun isSuccessfulCheck(code: Int?): Boolean =
+        code == 200 || code == 304 || code == 404
+
+    /** Only `v` plus dotted digits is an official release; `build-15` never is. */
+    internal fun officialVersion(tag: String): String? =
+        tag.trim().takeIf { OFFICIAL_TAG.matches(it) }?.removePrefix("v")
+
+    internal fun decide(release: Release, currentVersion: String, skippedVersion: String?): UpdateDecision {
+        if (release.draft || release.prerelease) return UpdateDecision(null, "pre-release or draft")
+        val version = officialVersion(release.tag) ?: return UpdateDecision(null, "tag is not a version")
+        val apk = release.apkUrl?.takeIf { it.startsWith("https://") }
+            ?: return UpdateDecision(null, "no APK asset")
+        if (!isNewerVersion(version, currentVersion)) return UpdateDecision(null, "not newer")
+        if (version == skippedVersion) return UpdateDecision(null, "skipped")
+        return UpdateDecision(AppUpdate(version, release.notes, apk))
+    }
+
+    /** The stored release is offered again only while it is still newer and not skipped. */
+    internal fun decideStored(stored: AppUpdate?, currentVersion: String, skippedVersion: String?): UpdateDecision {
+        if (stored == null) return UpdateDecision(null, "no stored update")
+        if (!isNewerVersion(stored.version, currentVersion)) {
+            return UpdateDecision(null, "stored update not newer")
+        }
+        if (stored.version == skippedVersion) return UpdateDecision(null, "skipped")
+        return UpdateDecision(stored)
+    }
+
+    private fun storedDecision(
+        stored: AppUpdate?,
+        currentVersion: String,
+        skippedVersion: String?,
+        reason: String,
+    ): AppUpdate? {
+        val decision = decideStored(stored, currentVersion, skippedVersion)
+        Log.d(
+            TAG,
+            decision.update?.let { "$reason: using stored ${it.version}" }
+                ?: "no dialog: $reason, ${decision.reason}",
+        )
+        return decision.update
+    }
+
+    private fun release(json: JSONObject) = Release(
+        tag = json.optString("tag_name"),
+        draft = json.optBoolean("draft"),
+        prerelease = json.optBoolean("prerelease"),
+        apkUrl = apkUrl(json),
+        notes = cleanNotes(json.optString("body")),
+    )
 
     private fun apkUrl(json: JSONObject): String? {
         val assets = json.optJSONArray("assets") ?: return null

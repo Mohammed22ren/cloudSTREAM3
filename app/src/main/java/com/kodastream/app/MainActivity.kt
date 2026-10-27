@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,9 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.kodastream.app.data.AppEvents
 import com.kodastream.app.data.AppPrefs
-import com.kodastream.app.data.AppUpdate
 import com.kodastream.app.data.DownloadStore
-import com.kodastream.app.data.UpdateChecker
 import com.kodastream.app.downloads.DownloadMigration
 import com.kodastream.app.downloads.DownloadService
 import com.kodastream.app.engine.AppBootstrap
@@ -37,6 +34,7 @@ import com.kodastream.app.ui.theme.KodaStreamTheme
 import com.kodastream.app.ui.theme.ThemeMode
 import com.kodastream.app.ui.theme.ThemeViewModel
 import com.kodastream.app.ui.update.UpdateDialog
+import com.kodastream.app.ui.update.UpdateViewModel
 import com.lagradost.cloudstream3.CommonActivity
 
 /**
@@ -76,16 +74,14 @@ class MainActivity : AppCompatActivity() {
 
         setContent {
             val themeViewModel: ThemeViewModel = viewModel()
+            // Activity-scoped: once per process, and survives recreation.
+            val updateViewModel: UpdateViewModel = viewModel()
             var setupDone by remember { mutableStateOf(AppPrefs.setupDone(this@MainActivity)) }
-            var update by remember { mutableStateOf<AppUpdate?>(null) }
+            val update = updateViewModel.update
             val dark = when (themeViewModel.mode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
-            }
-            // Throttled to once a day and silent on failure, so this is cheap.
-            LaunchedEffect(setupDone) {
-                if (setupDone) update = UpdateChecker.check(this@MainActivity)
             }
             KodaStreamTheme(
                 darkTheme = dark,
@@ -101,7 +97,7 @@ class MainActivity : AppCompatActivity() {
                             currentVersion = BuildConfig.VERSION_NAME,
                             onUpdate = {
                                 if (openLink(available.url)) {
-                                    update = null
+                                    updateViewModel.dismiss()
                                 } else {
                                     CommonActivity.showToast(R.string.update_link_failed)
                                 }
@@ -111,11 +107,8 @@ class MainActivity : AppCompatActivity() {
                                     CommonActivity.showToast(R.string.update_link_failed)
                                 }
                             },
-                            onLater = { update = null },
-                            onDontShowAgain = {
-                                AppPrefs.setSkippedUpdateVersion(this@MainActivity, available.version)
-                                update = null
-                            },
+                            onLater = updateViewModel::dismiss,
+                            onDontShowAgain = updateViewModel::skip,
                         )
                     }
                 } else {

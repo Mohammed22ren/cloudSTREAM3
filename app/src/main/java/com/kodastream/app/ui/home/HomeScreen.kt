@@ -46,7 +46,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodastream.app.R
-import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.engine.readableMessage
 import com.kodastream.app.ui.components.EmptyBox
@@ -85,9 +84,10 @@ data class HomeRow(
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
-    private val _providers = MutableStateFlow<List<MainAPI>>(emptyList())
+    private val _providers = MutableStateFlow(Engine.homeProviders())
     val providers: StateFlow<List<MainAPI>> = _providers.asStateFlow()
 
+    /** The provider currently loaded; set only by [setSource], never chosen here. */
     private val _selected = MutableStateFlow<String?>(null)
     val selected: StateFlow<String?> = _selected.asStateFlow()
 
@@ -122,36 +122,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             // Runs again every time an extension is installed, updated or removed.
-            PluginManager.revision.collect { refreshProviders() }
+            PluginManager.revision.collect { _providers.value = Engine.homeProviders() }
         }
     }
 
-    private fun refreshProviders() {
-        val available = Engine.homeProviders()
-        _providers.value = available
-        val current = _selected.value
-        if (current != null && available.any { it.name == current }) return
-
-        val saved = AppPrefs.selectedProvider(getApplication())
-        val next = available.firstOrNull { it.name == saved } ?: available.firstOrNull()
-        _selected.value = next?.name
-        if (next == null) {
+    /**
+     * Loads the name the source owner resolved. An equal name is a no-op, so a
+     * revision that does not change the selection never cancels a running load.
+     */
+    fun setSource(name: String?) {
+        if (name == _selected.value) return
+        _selected.value = name
+        if (name == null) {
             loadJob?.cancel()
             _rows.value = emptyList()
             _loading.value = false
             _error.value = null
-        } else {
-            load(next)
+            return
         }
-    }
-
-    fun select(name: String) {
-        if (name == _selected.value) return
         val api = Engine.provider(name) ?: return
-        // The sheet lists every installed provider; only those with a home page can fill this screen.
         if (!api.hasMainPage) return
-        _selected.value = name
-        AppPrefs.setSelectedProvider(getApplication(), name)
         load(api)
     }
 
@@ -222,16 +212,8 @@ fun HomeScreen(
     val startupDone by PluginManager.startupDone.collectAsState()
     val sourceName by sourceViewModel.home.collectAsState()
 
-    // A choice in the source sheet arrives here; the provider's own fallback
-    // picks the first usable provider when the saved one is gone.
-    LaunchedEffect(sourceName) {
-        val name = sourceName ?: return@LaunchedEffect
-        viewModel.select(name)
-        sourceViewModel.reportHome(viewModel.selected.value)
-    }
-    LaunchedEffect(selected) {
-        sourceViewModel.reportHome(selected)
-    }
+    // One direction: the source owner resolves the name, Home only loads it.
+    LaunchedEffect(sourceName) { viewModel.setSource(sourceName) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -244,6 +226,10 @@ fun HomeScreen(
             ) {
                 Button(onClick = onOpenExtensions) { Text(stringResource(R.string.open_extensions)) }
             }
+
+            // The owner is still resolving the saved source; do not show a
+            // different provider's shelves in the meantime.
+            selected == null -> LoadingBox(Modifier.padding(contentPadding))
 
             else -> ExpressivePullToRefresh(
                 isRefreshing = loading,

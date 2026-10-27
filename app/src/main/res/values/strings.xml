@@ -64,6 +64,7 @@
 
     <!-- Player -->
     <string name="sources">Sources</string>
+    <string name="source_no_home">No home page</string>
     <string name="subtitles">Subtitles</string>
     <string name="subtitles_off">Off</string>
     <string name="still_searching">Still searching for more sources…</string>

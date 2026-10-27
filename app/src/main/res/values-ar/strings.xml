@@ -61,6 +61,7 @@
 
     <!-- المشغّل -->
     <string name="sources">المصادر</string>
+    <string name="source_no_home">لا توجد صفحة رئيسية</string>
     <string name="subtitles">الترجمة</string>
     <string name="subtitles_off">إيقاف</string>
     <string name="still_searching">ما زال البحث عن مصادر أخرى جارياً…</string>

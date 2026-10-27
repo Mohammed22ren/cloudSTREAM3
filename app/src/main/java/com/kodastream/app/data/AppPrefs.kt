@@ -26,6 +26,10 @@ object AppPrefs {
     private const val KEY_APP_LANGUAGE = "app_language"
     private const val KEY_UPDATE_CHECK = "update_last_check"
     private const val KEY_UPDATE_SKIPPED = "update_skipped_version"
+    private const val KEY_UPDATE_VERSION = "update_version"
+    private const val KEY_UPDATE_URL = "update_url"
+    private const val KEY_UPDATE_NOTES = "update_notes"
+    private const val KEY_UPDATE_ETAG = "update_etag"
     private const val POSITION_PREFIX = "pos_"
     private const val DURATION_PREFIX = "dur_"
 
@@ -178,6 +182,37 @@ object AppPrefs {
     fun setSkippedUpdateVersion(context: Context, version: String?) {
         prefs(context).edit {
             if (version == null) remove(KEY_UPDATE_SKIPPED) else putString(KEY_UPDATE_SKIPPED, version)
+        }
+    }
+
+    /** The last official release found, offered again without a network call. */
+    fun storedUpdate(context: Context): AppUpdate? {
+        val prefs = prefs(context)
+        val version = prefs.getString(KEY_UPDATE_VERSION, null) ?: return null
+        val url = prefs.getString(KEY_UPDATE_URL, null) ?: return null
+        return AppUpdate(version, prefs.getString(KEY_UPDATE_NOTES, null), url)
+    }
+
+    fun setStoredUpdate(context: Context, update: AppUpdate?) {
+        prefs(context).edit {
+            if (update == null) {
+                remove(KEY_UPDATE_VERSION)
+                remove(KEY_UPDATE_URL)
+                remove(KEY_UPDATE_NOTES)
+            } else {
+                putString(KEY_UPDATE_VERSION, update.version)
+                putString(KEY_UPDATE_URL, update.url)
+                putString(KEY_UPDATE_NOTES, update.notes)
+            }
+        }
+    }
+
+    /** The GitHub ETag of the last successful release response. */
+    fun updateEtag(context: Context): String? = prefs(context).getString(KEY_UPDATE_ETAG, null)
+
+    fun setUpdateEtag(context: Context, etag: String?) {
+        prefs(context).edit {
+            if (etag == null) remove(KEY_UPDATE_ETAG) else putString(KEY_UPDATE_ETAG, etag)
         }
     }
 }
