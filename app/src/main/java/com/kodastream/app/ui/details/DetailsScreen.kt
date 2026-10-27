@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -14,10 +15,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,6 +31,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +42,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -44,7 +52,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Downloading
@@ -52,22 +62,26 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.RemoveDone
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Theaters
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -84,6 +98,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,15 +109,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.text.HtmlCompat
@@ -110,6 +133,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kodastream.app.R
 import com.kodastream.app.data.AppEvents
+import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DetailsArgs
 import com.kodastream.app.data.DownloadStore
 import com.kodastream.app.data.EpisodeQueues
@@ -137,17 +161,22 @@ import com.lagradost.cloudstream3.LiveStreamLoadResponse
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SeasonData
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TrailerData
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import java.util.Date
+import kotlin.math.roundToInt
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 
 sealed interface DetailsState {
@@ -280,6 +309,7 @@ private fun TopBar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DetailsContent(
     response: LoadResponse,
@@ -321,6 +351,9 @@ private fun DetailsContent(
         HistoryStore.entries.collect { updated -> updated?.let { history = it } }
     }
     var hideWatched by rememberSaveable { mutableStateOf(false) }
+    // Latest is a request, not a position: the effect that owns each list
+    // scrolls once the new season's episodes are on screen.
+    var scrollToLatest by remember { mutableStateOf(0) }
 
     // Library state is derived once per revision, not once per toggle button.
     val revision by LibraryStore.revision.collectAsState()
@@ -617,11 +650,250 @@ private fun DetailsContent(
         }
     }
 
-    val listState = rememberLazyListState()
-    val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     val tags = remember(response) { response.tags.orEmpty().filter { it.isNotBlank() } }
     val recommendations = remember(response) {
         response.recommendations.orEmpty().distinctBy { it.apiName to it.url }
+    }
+    val actors = remember(response) { response.actors.orEmpty() }
+
+    // The page as reusable groups, so phones can keep their single running
+    // list while the tablet splits the same groups across two panes.
+    val summaryItems: LazyListScope.() -> Unit = {
+        if (tags.isNotEmpty()) {
+            item(key = "tags") { TagsRow(tags) }
+        }
+
+        item(key = "actions") {
+            val downloadState = movieDownloadId?.let { downloadStates.value[it] }
+            PrimaryActions(
+                playLabel = playLabel,
+                playSubtitle = playSubtitle,
+                progress = resumeFraction,
+                playEnabled = playEnabled,
+                onPlay = playPrimary,
+                favorite = isFavorite,
+                onFavorite = { LibraryStore.toggleFavorite(context, libraryItem) },
+                watchlisted = isWatchlisted,
+                onWatchlist = { LibraryStore.toggleWatchlist(context, libraryItem) },
+                showDownload = isMovie && directData != null,
+                downloadState = downloadState,
+                onDownload = {
+                    when (downloadState) {
+                        null -> if (directData != null) {
+                            downloadSheet = DownloadTarget.Single(directData, null, null, null)
+                        }
+
+                        DownloadStore.STATE_DOWNLOADING -> movieDownloadId?.let { DownloadService.pause(context, it) }
+                        DownloadStore.STATE_PAUSED -> movieDownloadId?.let { DownloadService.resume(context, it) }
+                        DownloadStore.STATE_FAILED -> movieDownloadId?.let { DownloadService.retry(context, it) }
+                        DownloadStore.STATE_QUEUED -> movieDownloadId?.let { DownloadService.cancel(context, it) }
+                        DownloadStore.STATE_DONE -> Unit
+                    }
+                },
+                watched = if (isMovie) movieWatched else null,
+                onToggleWatched = {
+                    if (movieKey != null) {
+                        WatchedStore.setWatched(
+                            context = context,
+                            apiName = response.apiName,
+                            url = response.url,
+                            season = null,
+                            episode = null,
+                            resumeKey = null,
+                            watched = !movieWatched,
+                        )
+                    }
+                },
+                trailerUrl = primaryTrailerUrl,
+                onTrailer = {
+                    primaryTrailerUrl?.let { url -> runCatching { uriHandler.openUri(url) } }
+                },
+                onShare = share,
+            )
+        }
+
+        if (!plain.isNullOrBlank()) {
+            item(key = "overview") { Overview(plain) }
+        }
+    }
+
+    val castItem: LazyListScope.() -> Unit = {
+        if (actors.isNotEmpty()) {
+            item(key = "cast") {
+                SectionTitle(stringResource(R.string.cast_title))
+                CastRail(actors.take(20), response.posterHeaders)
+            }
+        }
+    }
+
+    val allWatched = visibleEpisodes.isNotEmpty() && visibleEpisodes.indices.all { i ->
+        episodeKey(visibleEpisodes[i], i) in watchedKeys
+    }
+    val toggleSeasonWatched: () -> Unit = {
+        setWatchedBatch(visibleEpisodes.mapIndexed { i, ep -> ep to i }, !allWatched)
+    }
+
+    val episodeHeader: @Composable (Boolean) -> Unit = { withSeasonAction ->
+        EpisodeHeader(
+            dubOptions = dubOptions,
+            selectedDub = selectedDub,
+            onSelectDub = { selectedDub = it },
+            seasons = seasons,
+            selectedSeason = selectedSeason,
+            seasonNames = seasonNames,
+            allEpisodes = allEpisodes,
+            onSelectSeason = { selectedSeason = it },
+            onLatest = {
+                selectedSeason = seasons.lastOrNull()
+                scrollToLatest++
+            },
+            hideWatched = hideWatched,
+            onMarkPreviousWatched = {
+                // Everything before the highest watched episode.
+                val maxWatched = visibleEpisodes.mapIndexedNotNull { i, ep ->
+                    if (episodeKey(ep, i) in watchedKeys) (ep.episode ?: i + 1) else null
+                }.maxOrNull()
+                if (maxWatched != null) {
+                    setWatchedBatch(
+                        visibleEpisodes.mapIndexed { i, ep -> ep to i }
+                            .filter { (ep, i) -> (ep.episode ?: i + 1) < maxWatched },
+                        true,
+                    )
+                }
+            },
+            onDownloadSeason = {
+                downloadSheet = DownloadTarget.Season(visibleEpisodes.toList())
+            },
+            onToggleHideWatched = { hideWatched = !hideWatched },
+            seasonAction = if (withSeasonAction) {
+                { SeasonWatchedAction(allWatched = allWatched, onClick = toggleSeasonWatched) }
+            } else {
+                null
+            },
+        )
+    }
+
+    val episodeCards: LazyListScope.() -> Unit = {
+        itemsIndexed(
+            items = visibleEpisodes,
+            key = { index, episode ->
+                "${episode.season}:${episode.episode ?: index}:${episode.data.hashCode()}"
+            },
+            contentType = { _, _ -> "episode" },
+        ) { index, episode ->
+            val watched = episodeKey(episode, index) in watchedKeys
+            // Hidden watched episodes keep their place in the index math,
+            // they just draw nothing while the toggle is on.
+            if (watched && hideWatched) return@itemsIndexed
+            // A composable call, so it is made here and not inside the click handler.
+            val label = episodeLabel(episode, index)
+            val downloadId = DownloadStore.idOf(
+                response.apiName, response.url,
+                episode.season ?: selectedSeason, episode.episode ?: index + 1,
+            )
+            val downloadState = downloadStates.value[downloadId]
+            val seasonIndex = seasons.indexOf(selectedSeason)
+            EpisodeCard(
+                episode = episode,
+                index = index,
+                posterHeaders = response.posterHeaders,
+                watched = watched,
+                downloadId = downloadId,
+                downloadState = downloadState,
+                resumeKey = response.apiName + "|" + episode.data,
+                history = history,
+                onClick = { play(episode.data, label, episode) },
+                onToggleWatched = {
+                    WatchedStore.setWatched(
+                        context = context,
+                        apiName = response.apiName,
+                        url = response.url,
+                        season = episode.season ?: selectedSeason,
+                        episode = episode.episode ?: index + 1,
+                        resumeKey = response.apiName + "|" + episode.data,
+                        watched = !watched,
+                    )
+                },
+                onDownload = {
+                    when (downloadState) {
+                        null -> downloadSheet = DownloadTarget.Single(
+                            episode.data,
+                            episode.season ?: selectedSeason,
+                            episode.episode ?: index + 1,
+                            episode.name,
+                        )
+
+                        DownloadStore.STATE_DOWNLOADING -> DownloadService.pause(context, downloadId)
+                        DownloadStore.STATE_PAUSED -> DownloadService.resume(context, downloadId)
+                        DownloadStore.STATE_FAILED -> DownloadService.retry(context, downloadId)
+                        DownloadStore.STATE_QUEUED -> DownloadService.cancel(context, downloadId)
+                        DownloadStore.STATE_DONE -> Unit
+                    }
+                },
+                onDownloadLongPress = {
+                    downloadSheet = DownloadTarget.Single(
+                        episode.data,
+                        episode.season ?: selectedSeason,
+                        episode.episode ?: index + 1,
+                        episode.name,
+                    )
+                },
+                modifier = if (seasons.size > 1) {
+                    Modifier.seasonSwipe(
+                        onPrevious = {
+                            selectedSeason = seasons.getOrNull(seasonIndex - 1) ?: selectedSeason
+                        },
+                        onNext = {
+                            selectedSeason = seasons.getOrNull(seasonIndex + 1) ?: selectedSeason
+                        },
+                    )
+                } else {
+                    Modifier
+                },
+            )
+        }
+    }
+
+    val unsupportedItem: LazyListScope.() -> Unit = {
+        item(key = "unsupported") {
+            Text(
+                text = stringResource(
+                    if (response.comingSoon) R.string.coming_soon else R.string.type_not_supported
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            )
+        }
+    }
+
+    val railItems: LazyListScope.() -> Unit = {
+        if (response.trailers.isNotEmpty()) {
+            item(key = "trailers") {
+                SectionTitle(stringResource(R.string.trailers_title))
+                TrailerRail(response.trailers)
+            }
+        }
+
+        if (recommendations.isNotEmpty()) {
+            item(key = "recommendations") {
+                Column {
+                    SectionTitle(stringResource(R.string.recommended))
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        itemsIndexed(
+                            items = recommendations,
+                            key = { _, item -> "${item.apiName}|${item.url}" },
+                            contentType = { _, _ -> "poster" },
+                        ) { _, item ->
+                            PosterCard(item = item, onClick = { onOpenItem(item) })
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Box(
@@ -629,325 +901,133 @@ private fun DetailsContent(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-        ) {
-            item(key = "hero") {
-                DetailsHero(
-                    response = response,
-                    title = title,
-                    parallax = {
-                        if (listState.firstVisibleItemIndex == 0) {
-                            listState.firstVisibleItemScrollOffset / 2f
-                        } else {
-                            0f
-                        }
-                    },
-                )
-            }
-
-            if (tags.isNotEmpty()) {
-                item(key = "tags") { TagsRow(tags) }
-            }
-
-            item(key = "actions") {
-                val downloadState = movieDownloadId?.let { downloadStates.value[it] }
-                PrimaryActions(
-                    playLabel = playLabel,
-                    playSubtitle = playSubtitle,
-                    progress = resumeFraction,
-                    playEnabled = playEnabled,
-                    onPlay = playPrimary,
-                    favorite = isFavorite,
-                    onFavorite = { LibraryStore.toggleFavorite(context, libraryItem) },
-                    watchlisted = isWatchlisted,
-                    onWatchlist = { LibraryStore.toggleWatchlist(context, libraryItem) },
-                    showDownload = isMovie && directData != null,
-                    downloadState = downloadState,
-                    onDownload = {
-                        when (downloadState) {
-                            null -> if (directData != null) {
-                                downloadSheet = DownloadTarget.Single(directData, null, null, null)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth >= 600.dp) {
+                // Two panes from 600dp: the title page on the start side (40%,
+                // capped), the episodes and rails on the end side.
+                val startWidth = (maxWidth * 0.4f).coerceAtMost(440.dp)
+                val startState = rememberLazyListState()
+                val endState = rememberLazyListState()
+                LaunchedEffect(scrollToLatest) {
+                    if (scrollToLatest > 0 && visibleEpisodes.isNotEmpty()) {
+                        endState.animateScrollToItem(visibleEpisodes.size)
+                    }
+                }
+                Row(Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .width(startWidth)
+                            .fillMaxHeight()
+                    ) {
+                        LazyColumn(
+                            state = startState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 24.dp),
+                        ) {
+                            item(key = "hero") {
+                                DetailsHero(
+                                    response = response,
+                                    title = title,
+                                    height = 480.dp,
+                                    parallax = { 0f },
+                                )
                             }
-
-                            DownloadStore.STATE_DOWNLOADING -> movieDownloadId?.let { DownloadService.pause(context, it) }
-                            DownloadStore.STATE_PAUSED -> movieDownloadId?.let { DownloadService.resume(context, it) }
-                            DownloadStore.STATE_FAILED -> movieDownloadId?.let { DownloadService.retry(context, it) }
-                            DownloadStore.STATE_QUEUED -> movieDownloadId?.let { DownloadService.cancel(context, it) }
-                            DownloadStore.STATE_DONE -> Unit
+                            summaryItems()
+                            castItem()
+                            item(key = "pane-bottom") { Spacer(Modifier.navigationBarsPadding()) }
                         }
-                    },
-                    watched = if (isMovie) movieWatched else null,
-                    onToggleWatched = {
-                        if (movieKey != null) {
-                            WatchedStore.setWatched(
-                                context = context,
-                                apiName = response.apiName,
-                                url = response.url,
-                                season = null,
-                                episode = null,
-                                resumeKey = null,
-                                watched = !movieWatched,
+                        TopBar(
+                            title = title,
+                            collapsed = false,
+                            onBack = onBack,
+                            onShare = share,
+                        )
+                    }
+                    LazyColumn(
+                        state = endState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .statusBarsPadding(),
+                        contentPadding = PaddingValues(bottom = 24.dp),
+                    ) {
+                        if (visibleEpisodes.isNotEmpty()) {
+                            stickyHeader(key = "episodes-header") {
+                                Column(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.background)
+                                ) {
+                                    episodeHeader(true)
+                                }
+                            }
+                            episodeCards()
+                        } else if (directData == null && episodesByDub.isEmpty()) {
+                            unsupportedItem()
+                        }
+                        railItems()
+                        item(key = "pane-bottom") { Spacer(Modifier.navigationBarsPadding()) }
+                    }
+                }
+            } else {
+                val listState = rememberLazyListState()
+                val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+                // hero + summary group + episodes header + the cards themselves.
+                val summaryItemCount =
+                    (if (tags.isNotEmpty()) 1 else 0) + 1 + (if (!plain.isNullOrBlank()) 1 else 0)
+                LaunchedEffect(scrollToLatest) {
+                    if (scrollToLatest > 0 && visibleEpisodes.isNotEmpty()) {
+                        listState.animateScrollToItem(1 + summaryItemCount + visibleEpisodes.size)
+                    }
+                }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                ) {
+                    item(key = "hero") {
+                        DetailsHero(
+                            response = response,
+                            title = title,
+                            parallax = {
+                                if (listState.firstVisibleItemIndex == 0) {
+                                    listState.firstVisibleItemScrollOffset / 2f
+                                } else {
+                                    0f
+                                }
+                            },
+                        )
+                    }
+
+                    summaryItems()
+
+                    if (visibleEpisodes.isNotEmpty()) {
+                        item(key = "episodes-header") { episodeHeader(false) }
+                        episodeCards()
+                        item(key = "season-watched") {
+                            SeasonWatchedAction(
+                                allWatched = allWatched,
+                                onClick = toggleSeasonWatched,
                             )
                         }
-                    },
-                    trailerUrl = primaryTrailerUrl,
-                    onTrailer = {
-                        primaryTrailerUrl?.let { url -> runCatching { uriHandler.openUri(url) } }
-                    },
+                    } else if (directData == null && episodesByDub.isEmpty()) {
+                        unsupportedItem()
+                    }
+
+                    castItem()
+                    railItems()
+
+                    item(key = "bottom-space") { Spacer(Modifier.navigationBarsPadding()) }
+                }
+
+                TopBar(
+                    title = title,
+                    collapsed = collapsed,
+                    onBack = onBack,
                     onShare = share,
                 )
             }
-
-            if (!plain.isNullOrBlank()) {
-                item(key = "overview") { Overview(plain) }
-            }
-
-            if (directData == null && episodesByDub.isEmpty()) {
-                item(key = "unsupported") {
-                    Text(
-                        text = stringResource(
-                            if (response.comingSoon) R.string.coming_soon else R.string.type_not_supported
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                    )
-                }
-            }
-
-            if (dubOptions.size > 1) {
-                item(key = "dubs") {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(
-                            items = dubOptions,
-                            key = { it.name },
-                            contentType = { "dub" },
-                        ) { dub ->
-                            FilterChip(
-                                selected = dub == selectedDub,
-                                onClick = { selectedDub = dub },
-                                label = {
-                                    Text(
-                                        stringResource(
-                                            when (dub) {
-                                                DubStatus.Dubbed -> R.string.dub
-                                                DubStatus.Subbed -> R.string.sub
-                                                DubStatus.None -> R.string.episodes
-                                            }
-                                        )
-                                    )
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (seasons.size > 1) {
-                item(key = "seasons") {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(
-                            items = seasons,
-                            key = { it },
-                            contentType = { "season" },
-                        ) { season ->
-                            val data = seasonNames.firstOrNull { it.season == season }
-                            val label = when {
-                                data?.name != null && data.displaySeason != null ->
-                                    stringResource(R.string.season_n, data.displaySeason!!) + " " + data.name
-                                data?.name != null -> data.name!!
-                                data?.displaySeason != null -> stringResource(R.string.season_n, data.displaySeason!!)
-                                else -> stringResource(R.string.season_n, season)
-                            }
-                            FilterChip(
-                                selected = season == selectedSeason,
-                                onClick = { selectedSeason = season },
-                                label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (visibleEpisodes.isNotEmpty()) {
-                item(key = "episodes-title") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionTitle(stringResource(R.string.episodes), Modifier.weight(1f))
-                        Box {
-                            var menuOpen by remember { mutableStateOf(false) }
-                            IconButton(
-                                onClick = { menuOpen = true },
-                                modifier = Modifier.padding(end = 12.dp),
-                            ) {
-                                Icon(
-                                    Icons.Rounded.MoreVert,
-                                    contentDescription = stringResource(R.string.episode_actions),
-                                )
-                            }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.mark_season_watched)) },
-                                    onClick = {
-                                        setWatchedBatch(visibleEpisodes.mapIndexed { i, ep -> ep to i }, true)
-                                        menuOpen = false
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.mark_previous_watched)) },
-                                    onClick = {
-                                        // Everything before the highest watched episode.
-                                        val maxWatched = visibleEpisodes.mapIndexedNotNull { i, ep ->
-                                            if (episodeKey(ep, i) in watchedKeys) (ep.episode ?: i + 1) else null
-                                        }.maxOrNull()
-                                        if (maxWatched != null) {
-                                            setWatchedBatch(
-                                                visibleEpisodes.mapIndexed { i, ep -> ep to i }
-                                                    .filter { (ep, i) -> (ep.episode ?: i + 1) < maxWatched },
-                                                true,
-                                            )
-                                        }
-                                        menuOpen = false
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.mark_season_unwatched)) },
-                                    onClick = {
-                                        setWatchedBatch(visibleEpisodes.mapIndexed { i, ep -> ep to i }, false)
-                                        menuOpen = false
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.download_season)) },
-                                    onClick = {
-                                        menuOpen = false
-                                        downloadSheet = DownloadTarget.Season(visibleEpisodes.toList())
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.hide_watched)) },
-                                    leadingIcon = {
-                                        if (hideWatched) {
-                                            Icon(Icons.Rounded.CheckCircle, contentDescription = null)
-                                        }
-                                    },
-                                    onClick = {
-                                        hideWatched = !hideWatched
-                                        menuOpen = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-                itemsIndexed(
-                    items = visibleEpisodes,
-                    key = { index, episode ->
-                        "${episode.season}:${episode.episode ?: index}:${episode.data.hashCode()}"
-                    },
-                    contentType = { _, _ -> "episode" },
-                ) { index, episode ->
-                    val watched = episodeKey(episode, index) in watchedKeys
-                    // Hidden watched episodes keep their place in the index math,
-                    // they just draw nothing while the toggle is on.
-                    if (watched && hideWatched) return@itemsIndexed
-                    // A composable call, so it is made here and not inside the click handler.
-                    val label = episodeLabel(episode, index)
-                    val downloadId = DownloadStore.idOf(
-                        response.apiName, response.url,
-                        episode.season ?: selectedSeason, episode.episode ?: index + 1,
-                    )
-                    val downloadState = downloadStates.value[downloadId]
-                    EpisodeRow(
-                        episode = episode,
-                        index = index,
-                        posterHeaders = response.posterHeaders,
-                        watched = watched,
-                        downloadState = downloadState,
-                        onClick = { play(episode.data, label, episode) },
-                        onToggleWatched = {
-                            WatchedStore.setWatched(
-                                context = context,
-                                apiName = response.apiName,
-                                url = response.url,
-                                season = episode.season ?: selectedSeason,
-                                episode = episode.episode ?: index + 1,
-                                resumeKey = response.apiName + "|" + episode.data,
-                                watched = !watched,
-                            )
-                        },
-                        onDownload = {
-                            when (downloadState) {
-                                null -> downloadSheet = DownloadTarget.Single(
-                                    episode.data,
-                                    episode.season ?: selectedSeason,
-                                    episode.episode ?: index + 1,
-                                    episode.name,
-                                )
-
-                                DownloadStore.STATE_DOWNLOADING -> DownloadService.pause(context, downloadId)
-                                DownloadStore.STATE_PAUSED -> DownloadService.resume(context, downloadId)
-                                DownloadStore.STATE_FAILED -> DownloadService.retry(context, downloadId)
-                                DownloadStore.STATE_QUEUED -> DownloadService.cancel(context, downloadId)
-                                DownloadStore.STATE_DONE -> Unit
-                            }
-                        },
-                    )
-                }
-            }
-
-            val actors = response.actors.orEmpty()
-            if (actors.isNotEmpty()) {
-                item(key = "cast") {
-                    SectionTitle(stringResource(R.string.cast_title))
-                    CastRail(actors.take(20), response.posterHeaders)
-                }
-            }
-
-            if (response.trailers.isNotEmpty()) {
-                item(key = "trailers") {
-                    SectionTitle(stringResource(R.string.trailers_title))
-                    TrailerRail(response.trailers)
-                }
-            }
-
-            if (recommendations.isNotEmpty()) {
-                item(key = "recommendations") {
-                    Column {
-                        SectionTitle(stringResource(R.string.recommended))
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            itemsIndexed(
-                                items = recommendations,
-                                key = { _, item -> "${item.apiName}|${item.url}" },
-                                contentType = { _, _ -> "poster" },
-                            ) { _, item ->
-                                PosterCard(item = item, onClick = { onOpenItem(item) })
-                            }
-                        }
-                    }
-                }
-            }
-
-            item(key = "bottom-space") { Spacer(Modifier.navigationBarsPadding()) }
         }
-
-        TopBar(
-            title = title,
-            collapsed = collapsed,
-            onBack = onBack,
-            onShare = share,
-        )
 
         SnackbarHost(
             hostState = snackbar,
@@ -991,12 +1071,13 @@ private fun DetailsContent(
 private fun DetailsHero(
     response: LoadResponse,
     title: String,
+    height: Dp = 540.dp,
     parallax: () -> Float,
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(540.dp)
+            .height(height)
             // The parallax shifts the artwork down; without clipping its bottom edge shows below the hero.
             .clipToBounds()
     ) {
@@ -1496,34 +1577,6 @@ private fun trailerUrl(trailer: TrailerData): String? {
     return if (raw.startsWith("http")) raw else "https://www.youtube.com/watch?v=$raw"
 }
 
-/** The download affordance: one icon that reads the download state and acts on tap. */
-@Composable
-private fun DownloadStateIcon(
-    downloadState: String?,
-    onDownload: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val (icon, tint, description) = when (downloadState) {
-        null -> Triple(Icons.Rounded.Download, MaterialTheme.colorScheme.onSurfaceVariant, R.string.cd_download)
-        DownloadStore.STATE_QUEUED -> Triple(Icons.Rounded.Schedule, MaterialTheme.colorScheme.onSurfaceVariant, R.string.download_queued)
-        DownloadStore.STATE_DOWNLOADING -> Triple(Icons.Rounded.Downloading, MaterialTheme.colorScheme.primary, R.string.cd_download_pause)
-        DownloadStore.STATE_PAUSED -> Triple(Icons.Rounded.PauseCircle, MaterialTheme.colorScheme.secondary, R.string.cd_download_resume)
-        DownloadStore.STATE_FAILED -> Triple(Icons.Rounded.ErrorOutline, MaterialTheme.colorScheme.error, R.string.cd_download_retry)
-        DownloadStore.STATE_DONE -> Triple(Icons.Rounded.DownloadDone, MaterialTheme.colorScheme.primary, R.string.downloaded)
-        else -> Triple(Icons.Rounded.Download, MaterialTheme.colorScheme.onSurfaceVariant, R.string.cd_download)
-    }
-    Icon(
-        imageVector = icon,
-        contentDescription = stringResource(description),
-        tint = tint,
-        modifier = modifier
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onDownload)
-            .padding(12.dp)
-            .size(24.dp),
-    )
-}
-
 @Composable
 private fun episodeLabel(episode: Episode, index: Int): String {
     val number = episode.episode ?: (index + 1)
@@ -1531,100 +1584,571 @@ private fun episodeLabel(episode: Episode, index: Int): String {
     return if (episode.name.isNullOrBlank()) base else "$base • ${episode.name}"
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EpisodeRow(
+private fun EpisodeCard(
     episode: Episode,
     index: Int,
     posterHeaders: Map<String, String>?,
     watched: Boolean,
+    downloadId: String,
     downloadState: String?,
+    resumeKey: String,
+    history: List<HistoryEntry>,
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
-    onDownload: () -> Unit = {},
+    onDownload: () -> Unit,
+    onDownloadLongPress: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val number = episode.episode ?: (index + 1)
     val title = episode.name?.takeIf { it.isNotBlank() } ?: stringResource(R.string.episode_n, number)
-    // Watched episodes dim out of the way; their check stays fully opaque.
-    val dim = if (watched) 0.45f else 1f
-    Row(
-        modifier = Modifier
+    val markWatchedLabel = stringResource(if (watched) R.string.mark_unwatched else R.string.mark_watched)
+    val downloadLabel = stringResource(R.string.download)
+    val chooseSourceLabel = stringResource(R.string.download_pick_quality)
+    val playLabel = stringResource(R.string.play)
+    val moreLabel = stringResource(R.string.episode_actions)
+    var menuOpen by remember { mutableStateOf(false) }
+
+    val description = remember(episode.description) {
+        episode.description
+            ?.let { HtmlCompat.fromHtml(it, HtmlCompat.FROM_HTML_MODE_COMPACT).toString().trim() }
+            ?.takeIf { it.isNotBlank() }
+    }
+    val meta = remember(episode.runTime, episode.date, context) {
+        val runtime = episode.runTime
+            ?.takeIf { it > 0 }
+            ?.let { context.getString(R.string.minutes_short, it) }
+        val date = episode.date?.let { DateFormat.getMediumDateFormat(context).format(Date(it)) }
+        listOfNotNull(runtime, date).joinToString(" · ")
+    }
+    // History changes after playback, so it both keys the read and refreshes it.
+    val progress = remember(resumeKey, history) {
+        val duration = AppPrefs.duration(context, resumeKey)
+        val position = AppPrefs.position(context, resumeKey)
+        if (duration > 0L && position >= 5_000L) {
+            (position.toFloat() / duration).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+    }
+
+    Box(
+        modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        RemoteImage(
-            url = episode.posterUrl,
-            headers = posterHeaders,
-            modifier = Modifier
-                .width(120.dp)
-                .aspectRatio(16f / 9f)
-                .clip(MaterialTheme.shapes.small)
-                .graphicsLayer { alpha = dim },
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .graphicsLayer { alpha = dim },
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = "$number. $title",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.large)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    menuOpen = true
+                },
+                onClickLabel = playLabel,
+                onLongClickLabel = moreLabel,
             )
-            val description = episode.description?.takeIf { it.isNotBlank() }
+            .semantics(mergeDescendants = true) {
+                customActions = listOf(
+                    CustomAccessibilityAction(markWatchedLabel) { onToggleWatched(); true },
+                    CustomAccessibilityAction(downloadLabel) { onDownload(); true },
+                    CustomAccessibilityAction(chooseSourceLabel) { onDownloadLongPress(); true },
+                )
+            }
+            .padding(8.dp),
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .width(148.dp)
+                        .aspectRatio(16f / 9f)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                ) {
+                    RemoteImage(
+                        url = episode.posterUrl,
+                        headers = posterHeaders,
+                        contentScale = ContentScale.Crop,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    EpisodeThumbnailOverlay(number = number, watched = watched, progress = progress)
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 14.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (meta.isNotEmpty()) {
+                        Text(
+                            text = meta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+                EpisodeDownloadAction(
+                    downloadId = downloadId,
+                    downloadState = downloadState,
+                    onDownload = onDownload,
+                    onDownloadLongPress = onDownloadLongPress,
+                )
+            }
             if (description != null) {
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp),
                 )
             }
         }
-        DownloadStateIcon(downloadState = downloadState, onDownload = onDownload)
-        ToggleIconButton(
-            filledIcon = Icons.Rounded.CheckCircle,
-            outlinedIcon = Icons.Outlined.CheckCircle,
-            active = watched,
-            label = stringResource(R.string.cd_mark_watched),
-            onToggle = onToggleWatched,
+
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(markWatchedLabel) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.CheckCircle,
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    onToggleWatched()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(downloadLabel) },
+                leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
+                onClick = {
+                    menuOpen = false
+                    onDownload()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(chooseSourceLabel) },
+                onClick = {
+                    menuOpen = false
+                    onDownloadLongPress()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.EpisodeThumbnailOverlay(
+    number: Int,
+    watched: Boolean,
+    progress: Float,
+) {
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.65f),
+        contentColor = Color.White,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(6.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.episode_badge, number),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
-        Icon(
-            imageVector = Icons.Rounded.PlayArrow,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+    }
+    when {
+        watched -> Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.CheckCircle,
+                contentDescription = stringResource(R.string.cd_watched),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+
+        progress > 0f -> LinearWavyProgressIndicator(
+            progress = { progress },
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
         )
     }
 }
 
-/** A toggle button whose icon springs between its filled and outlined form. */
+@OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
-private fun ToggleIconButton(
-    filledIcon: ImageVector,
-    outlinedIcon: ImageVector,
-    active: Boolean,
-    label: String,
-    onToggle: () -> Unit,
+private fun EpisodeDownloadAction(
+    downloadId: String,
+    downloadState: String?,
+    onDownload: () -> Unit,
+    onDownloadLongPress: () -> Unit,
 ) {
-    FilledTonalIconButton(onClick = onToggle) {
-        AnimatedContent(
-            targetState = active,
-            transitionSpec = {
-                (scaleIn(bouncySpring()) + fadeIn()).togetherWith(scaleOut() + fadeOut())
+    val haptics = LocalHapticFeedback.current
+    val clickLabel = stringResource(
+        when (downloadState) {
+            DownloadStore.STATE_DOWNLOADING -> R.string.cd_download_pause
+            DownloadStore.STATE_PAUSED -> R.string.cd_download_resume
+            DownloadStore.STATE_FAILED -> R.string.cd_download_retry
+            DownloadStore.STATE_QUEUED -> R.string.cd_download_cancel
+            DownloadStore.STATE_DONE -> R.string.downloaded
+            else -> R.string.cd_download
+        }
+    )
+    val longLabel = stringResource(R.string.download_options_title)
+    val clickModifier = Modifier
+        .size(48.dp)
+        .clip(MaterialTheme.shapes.medium)
+        .combinedClickable(
+            onClick = onDownload,
+            onLongClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onDownloadLongPress()
             },
-            label = "libraryToggle",
-        ) { filled ->
+            onClickLabel = clickLabel,
+            onLongClickLabel = longLabel,
+        )
+
+    when (downloadState) {
+        DownloadStore.STATE_QUEUED -> Box(clickModifier, contentAlignment = Alignment.Center) {
+            LoadingIndicator(Modifier.size(32.dp))
+        }
+
+        DownloadStore.STATE_DOWNLOADING -> {
+            // Only this row watches byte progress, and only four times a second.
+            val progress by remember(downloadId) {
+                DownloadStore.entries
+                    .map { entries ->
+                        entries.orEmpty().firstOrNull { it.id == downloadId }?.progressFraction ?: -1f
+                    }
+                    .distinctUntilChanged()
+                    .sample(500L)
+            }.collectAsState(initial = -1f)
+            Box(clickModifier, contentAlignment = Alignment.Center) {
+                if (progress >= 0f) {
+                    LinearWavyProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth(0.55f),
+                    )
+                } else {
+                    LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth(0.55f))
+                }
+            }
+        }
+
+        DownloadStore.STATE_PAUSED -> DownloadIconAction(
+            icon = Icons.Rounded.PlayArrow,
+            tint = MaterialTheme.colorScheme.primary,
+            description = R.string.cd_download_resume,
+            modifier = clickModifier,
+        )
+
+        DownloadStore.STATE_FAILED -> DownloadIconAction(
+            icon = Icons.Rounded.Refresh,
+            tint = MaterialTheme.colorScheme.error,
+            description = R.string.cd_download_retry,
+            modifier = clickModifier,
+        )
+
+        DownloadStore.STATE_DONE -> DownloadIconAction(
+            icon = Icons.Rounded.Check,
+            tint = MaterialTheme.colorScheme.primary,
+            description = R.string.downloaded,
+            modifier = clickModifier,
+        )
+
+        else -> DownloadIconAction(
+            icon = Icons.Rounded.Download,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            description = R.string.cd_download,
+            modifier = clickModifier,
+        )
+    }
+}
+
+@Composable
+private fun DownloadIconAction(
+    icon: ImageVector,
+    tint: Color,
+    description: Int,
+    modifier: Modifier,
+) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = icon,
+            contentDescription = stringResource(description),
+            tint = tint,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun SeasonWatchedAction(
+    allWatched: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        TextButton(onClick = onClick) {
             Icon(
-                imageVector = if (filled) filledIcon else outlinedIcon,
-                contentDescription = label,
-                tint = if (filled) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                imageVector = if (allWatched) Icons.Rounded.RemoveDone else Icons.Rounded.DoneAll,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
             )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                stringResource(
+                    if (allWatched) R.string.mark_season_unwatched else R.string.mark_season_watched
+                )
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun EpisodeHeader(
+    dubOptions: List<DubStatus>,
+    selectedDub: DubStatus?,
+    onSelectDub: (DubStatus) -> Unit,
+    seasons: List<Int>,
+    selectedSeason: Int?,
+    seasonNames: List<SeasonData>,
+    allEpisodes: List<Episode>,
+    onSelectSeason: (Int) -> Unit,
+    onLatest: () -> Unit,
+    hideWatched: Boolean,
+    onMarkPreviousWatched: () -> Unit,
+    onDownloadSeason: () -> Unit,
+    onToggleHideWatched: () -> Unit,
+    seasonAction: (@Composable () -> Unit)? = null,
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionTitle(stringResource(R.string.episodes), Modifier.weight(1f))
+            Box {
+                var menuOpen by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.padding(end = 12.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = stringResource(R.string.episode_actions),
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mark_previous_watched)) },
+                        onClick = {
+                            onMarkPreviousWatched()
+                            menuOpen = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.download_season)) },
+                        onClick = {
+                            onDownloadSeason()
+                            menuOpen = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.hide_watched)) },
+                        leadingIcon = {
+                            if (hideWatched) {
+                                Icon(Icons.Rounded.Check, contentDescription = null)
+                            }
+                        },
+                        onClick = {
+                            onToggleHideWatched()
+                            menuOpen = false
+                        },
+                    )
+                }
+            }
+        }
+        if (seasons.isNotEmpty()) {
+            SeasonPicker(
+                seasons = seasons,
+                selected = selectedSeason,
+                seasonNames = seasonNames,
+                allEpisodes = allEpisodes,
+                onSelect = onSelectSeason,
+                onLatest = onLatest,
+            )
+        }
+        if (dubOptions.size > 1) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(
+                    items = dubOptions,
+                    key = { it.name },
+                    contentType = { "dub" },
+                ) { dub ->
+                    FilterChip(
+                        selected = dub == selectedDub,
+                        onClick = { onSelectDub(dub) },
+                        shape = MaterialTheme.shapes.small,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                        label = { Text(dubLabel(dub)) },
+                    )
+                }
+            }
+        }
+        seasonAction?.invoke()
+    }
+}
+
+@Composable
+private fun SeasonPicker(
+    seasons: List<Int>,
+    selected: Int?,
+    seasonNames: List<SeasonData>,
+    allEpisodes: List<Episode>,
+    onSelect: (Int) -> Unit,
+    onLatest: () -> Unit,
+) {
+    val rowState = rememberLazyListState()
+    val lastNumber = allEpisodes.maxOfOrNull { it.episode ?: 0 }?.takeIf { it > 0 }
+        ?: allEpisodes.size.takeIf { it > 0 }
+    val showLatest = lastNumber != null && (seasons.size > 1 || lastNumber > 12)
+    val latestOffset = if (showLatest) 1 else 0
+    LaunchedEffect(selected, showLatest) {
+        val index = seasons.indexOf(selected)
+        if (index >= 0) rowState.animateScrollToItem(index + latestOffset)
+    }
+    LazyRow(
+        state = rowState,
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (showLatest && lastNumber != null) {
+            item(key = "latest") {
+                AssistChip(
+                    onClick = onLatest,
+                    shape = MaterialTheme.shapes.small,
+                    label = {
+                        Text(
+                            stringResource(R.string.latest) + " · " +
+                                stringResource(R.string.episode_badge, lastNumber)
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Rounded.NewReleases,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+            }
+        }
+        items(
+            items = seasons,
+            key = { "season-$it" },
+            contentType = { "season" },
+        ) { season ->
+            val data = seasonNames.firstOrNull { it.season == season }
+            val label = when {
+                data?.name != null && data.displaySeason != null ->
+                    stringResource(R.string.season_n, data.displaySeason!!) + " " + data.name
+                data?.name != null -> data.name!!
+                data?.displaySeason != null -> stringResource(R.string.season_n, data.displaySeason!!)
+                else -> stringResource(R.string.season_n, season)
+            }
+            val count = allEpisodes.count { it.season == season }
+            FilterChip(
+                selected = season == selected,
+                onClick = { onSelect(season) },
+                shape = MaterialTheme.shapes.small,
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+                label = {
+                    Text(
+                        text = if (count > 0) "$label · $count" else label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun dubLabel(dub: DubStatus): String = stringResource(
+    when (dub) {
+        DubStatus.Dubbed -> R.string.dub
+        DubStatus.Subbed -> R.string.sub
+        DubStatus.None -> R.string.episodes
+    }
+)
+
+/** A decided horizontal swipe (a fifth of the width) changes the season. */
+@Composable
+private fun Modifier.seasonSwipe(onPrevious: () -> Unit, onNext: () -> Unit): Modifier {
+    val latestPrevious by rememberUpdatedState(onPrevious)
+    val latestNext by rememberUpdatedState(onNext)
+    val haptics = LocalHapticFeedback.current
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    return pointerInput(rtl) {
+        var travel = 0f
+        detectHorizontalDragGestures(
+            onDragStart = { travel = 0f },
+            onDragEnd = {
+                val threshold = size.width / 5f
+                val toNext = if (rtl) travel > threshold else travel < -threshold
+                val toPrevious = if (rtl) travel < -threshold else travel > threshold
+                when {
+                    toNext -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                        latestNext()
+                    }
+
+                    toPrevious -> {
+                        haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                        latestPrevious()
+                    }
+                }
+            },
+        ) { change, amount ->
+            change.consume()
+            travel += amount
         }
     }
 }
@@ -1633,59 +2157,106 @@ private fun ToggleIconButton(
 @Composable
 private fun DetailsSkeleton() {
     SkeletonPulseProvider {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxWidth().height(540.dp)) {
-                SkeletonBox(modifier = Modifier.fillMaxSize(), shape = null)
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    SkeletonBox(
-                        modifier = Modifier.size(112.dp, 166.dp),
-                        shape = MaterialTheme.shapes.large,
-                    )
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth >= 600.dp) {
+                val startWidth = (maxWidth * 0.4f).coerceAtMost(440.dp)
+                Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.width(startWidth)) {
+                        SkeletonHero(480.dp)
+                        SkeletonSummary()
+                    }
                     Column(
-                        modifier = Modifier.padding(start = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         SkeletonBox(
-                            modifier = Modifier.size(190.dp, 30.dp),
+                            modifier = Modifier.size(180.dp, 28.dp),
                             shape = MaterialTheme.shapes.small,
                         )
-                        SkeletonBox(
-                            modifier = Modifier.size(130.dp, 16.dp),
-                            shape = MaterialTheme.shapes.small,
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            repeat(4) {
+                                SkeletonBox(
+                                    modifier = Modifier.size(84.dp, 32.dp),
+                                    shape = MaterialTheme.shapes.small,
+                                )
+                            }
+                        }
+                        repeat(4) {
+                            SkeletonBox(
+                                modifier = Modifier.fillMaxWidth().height(104.dp),
+                                shape = MaterialTheme.shapes.medium,
+                            )
+                        }
                     }
                 }
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    SkeletonHero(540.dp)
+                    SkeletonSummary()
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonHero(height: Dp) {
+    Box(modifier = Modifier.fillMaxWidth().height(height)) {
+        SkeletonBox(modifier = Modifier.fillMaxSize(), shape = null)
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            SkeletonBox(
+                modifier = Modifier.size(112.dp, 166.dp),
+                shape = MaterialTheme.shapes.large,
+            )
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(start = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SkeletonBox(
-                    modifier = Modifier.fillMaxWidth().height(60.dp),
-                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.size(190.dp, 30.dp),
+                    shape = MaterialTheme.shapes.small,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeat(3) {
-                        SkeletonBox(
-                            modifier = Modifier.weight(1f).height(72.dp),
-                            shape = MaterialTheme.shapes.medium,
-                        )
-                    }
-                }
-                repeat(3) { index ->
-                    SkeletonBox(
-                        modifier = Modifier
-                            .fillMaxWidth(if (index == 2) 0.6f else 1f)
-                            .height(16.dp),
-                        shape = MaterialTheme.shapes.small,
-                    )
-                }
+                SkeletonBox(
+                    modifier = Modifier.size(130.dp, 16.dp),
+                    shape = MaterialTheme.shapes.small,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonSummary() {
+    Column(
+        modifier = Modifier.padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SkeletonBox(
+            modifier = Modifier.fillMaxWidth().height(60.dp),
+            shape = MaterialTheme.shapes.large,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(3) {
+                SkeletonBox(
+                    modifier = Modifier.weight(1f).height(72.dp),
+                    shape = MaterialTheme.shapes.medium,
+                )
+            }
+        }
+        repeat(3) { index ->
+            SkeletonBox(
+                modifier = Modifier
+                    .fillMaxWidth(if (index == 2) 0.6f else 1f)
+                    .height(16.dp),
+                shape = MaterialTheme.shapes.small,
+            )
         }
     }
 }

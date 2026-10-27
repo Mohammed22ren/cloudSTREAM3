@@ -66,13 +66,13 @@ fun RemoteImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
     contentDescription: String? = null,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
 ) {
     val context = LocalContext.current
-    val container = MaterialTheme.colorScheme.surfaceContainerHigh
-    val placeholder = remember(container) { ColorPainter(container) }
+    val placeholder = remember(containerColor) { ColorPainter(containerColor) }
     var failed by remember(url) { mutableStateOf(false) }
     Box(
-        modifier = modifier.background(container),
+        modifier = modifier.background(containerColor),
         contentAlignment = Alignment.Center,
     ) {
         if (url.isNullOrBlank()) {

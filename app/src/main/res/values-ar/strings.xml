@@ -45,6 +45,7 @@
     <string name="search_idle_hint">يعمل البحث على جميع المزوّدين المثبّتين في وقت واحد.</string>
     <string name="search_no_results">لا توجد نتائج</string>
     <string name="search_no_results_hint">جرّب كتابة أخرى أو ثبّت مزوّدين إضافيين.</string>
+    <string name="searching_in">البحث في: %1$s</string>
 
     <!-- التفاصيل -->
     <string name="episodes">الحلقات</string>
@@ -53,6 +54,8 @@
     <string name="sub">مترجم</string>
     <string name="season_n">الموسم %1$d</string>
     <string name="episode_n">الحلقة %1$d</string>
+    <string name="episode_badge">ح%1$d</string>
+    <string name="latest">الأحدث</string>
     <string name="minutes_short">%1$d د</string>
     <string name="type_not_supported">هذا النوع من المحتوى (مثل التورنت) لا يمكن تشغيله في هذا الإصدار.</string>
 
@@ -256,6 +259,8 @@
     <string name="action_share">مشاركة</string>
     <string name="downloading">جارٍ التنزيل</string>
     <string name="mark_watched">تحديد كمشاهد</string>
+    <string name="mark_unwatched">إلغاء تعليم المشاهدة</string>
+    <string name="cd_choose_source">اختر المصدر</string>
     <string name="cast_title">طاقم العمل</string>
     <string name="trailers_title">الإعلانات</string>
     <string name="trailer_n">الإعلان %1$d</string>

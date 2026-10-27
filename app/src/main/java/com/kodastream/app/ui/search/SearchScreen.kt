@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
@@ -25,9 +24,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,9 +45,8 @@ import com.kodastream.app.engine.Engine
 import com.kodastream.app.ui.components.EmptyBox
 import com.kodastream.app.ui.components.PosterCard
 import com.kodastream.app.ui.components.SectionHeader
-import com.lagradost.cloudstream3.MainAPI
+import com.kodastream.app.ui.sources.SourceViewModel
 import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.plugins.PluginManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,18 +69,7 @@ class SearchViewModel : ViewModel() {
     private val _searched = MutableStateFlow(false)
     val searched: StateFlow<Boolean> = _searched.asStateFlow()
 
-    /** The installed providers, refreshed when extensions change. */
-    private val _providers = MutableStateFlow<List<MainAPI>>(emptyList())
-    val providers: StateFlow<List<MainAPI>> = _providers.asStateFlow()
-
     private var job: Job? = null
-
-    init {
-        viewModelScope.launch {
-            // Fires once immediately, then again on every install/update/remove.
-            PluginManager.revision.collect { _providers.value = Engine.providers() }
-        }
-    }
 
     /** [scope] narrows the search to one provider by name; null searches every provider. */
     fun submit(query: String, scope: String? = null) {
@@ -127,15 +116,22 @@ class SearchViewModel : ViewModel() {
 fun SearchScreen(
     contentPadding: PaddingValues,
     onOpenItem: (SearchResponse) -> Unit,
+    sourceViewModel: SourceViewModel,
     viewModel: SearchViewModel = viewModel(),
 ) {
     val groups by viewModel.groups.collectAsState()
     val searching by viewModel.searching.collectAsState()
     val searched by viewModel.searched.collectAsState()
-    val providers by viewModel.providers.collectAsState()
+    val scope by sourceViewModel.search.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
-    // Which single provider to search, or null for every provider at once.
-    var scope by rememberSaveable { mutableStateOf<String?>(null) }
+    // The scope lives in the shared holder so the source sheet can change it.
+    var appliedScope by remember { mutableStateOf(scope) }
+    LaunchedEffect(scope) {
+        if (scope != appliedScope) {
+            appliedScope = scope
+            if (query.isNotBlank()) viewModel.submit(query, scope) else viewModel.clear()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -158,6 +154,14 @@ fun SearchScreen(
                     }
                 }
             },
+            supportingText = {
+                Text(
+                    text = stringResource(
+                        R.string.searching_in,
+                        scope ?: stringResource(R.string.search_scope_all),
+                    )
+                )
+            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { viewModel.submit(query, scope) }),
             shape = MaterialTheme.shapes.extraLarge,
@@ -171,36 +175,6 @@ fun SearchScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         )
-
-        // The source picker: all providers at once, or just one. A query that
-        // is already typed re-runs the moment the scope changes.
-        if (providers.size > 1) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item(key = "all") {
-                    FilterChip(
-                        selected = scope == null,
-                        onClick = {
-                            scope = null
-                            if (query.isNotBlank()) viewModel.submit(query, null) else viewModel.clear()
-                        },
-                        label = { Text(stringResource(R.string.search_scope_all)) },
-                    )
-                }
-                items(providers, key = { it.name }) { api ->
-                    FilterChip(
-                        selected = scope == api.name,
-                        onClick = {
-                            scope = api.name
-                            if (query.isNotBlank()) viewModel.submit(query, api.name) else viewModel.clear()
-                        },
-                        label = { Text(api.name) },
-                    )
-                }
-            }
-        }
 
         Box(Modifier.fillMaxSize()) {
             when {

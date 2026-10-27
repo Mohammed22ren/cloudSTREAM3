@@ -38,6 +38,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private lateinit var args: PlayerArgs
     private var watchedKey: String? = null
+    private var halfWatchedKey: String? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val progressTicker = object : Runnable {
@@ -125,6 +126,18 @@ class PlayerActivity : AppCompatActivity() {
         if (changedEpisode) HistoryStore.upsert(this, entry)
         else HistoryStore.updateProgress(this, entry.key, position, duration)
         AppPrefs.setPosition(this, resumeKey, position)
+        if (duration > 0) AppPrefs.setDuration(this, resumeKey, duration)
+
+        // Halfway marks the episode itself. History stays untouched on purpose:
+        // marking the whole title complete would hide "Continue watching".
+        if (duration > 0 && position >= duration / 2 && halfWatchedKey != resumeKey) {
+            halfWatchedKey = resumeKey
+            WatchedStore.setAll(
+                this,
+                listOf(WatchedStore.keyOf(entry.apiName, entry.url, episode.season, episode.episode)),
+                true,
+            )
+        }
 
         if (duration > 0 && position >= duration * 0.9 && watchedKey != resumeKey) {
             watchedKey = resumeKey

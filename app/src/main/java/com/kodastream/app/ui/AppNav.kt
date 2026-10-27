@@ -9,6 +9,8 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
@@ -46,6 +48,7 @@ import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VideoLibrary
@@ -53,6 +56,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,6 +64,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -101,6 +108,8 @@ import com.kodastream.app.ui.library.LibraryScreen
 import com.kodastream.app.ui.player.PlayerActivity
 import com.kodastream.app.ui.search.SearchScreen
 import com.kodastream.app.ui.settings.SettingsScreen
+import com.kodastream.app.ui.sources.SourceSheet
+import com.kodastream.app.ui.sources.SourceViewModel
 import com.kodastream.app.ui.theme.ThemeViewModel
 import com.lagradost.cloudstream3.SearchResponse
 
@@ -211,6 +220,14 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
     val showBar = topLevelDestinations.any { it.route == route }
+    val sourceVisible = route == Routes.HOME || route == Routes.SEARCH
+    val sources: SourceViewModel = viewModel()
+
+    // The source sheet is hosted here so both routes and both shells share it.
+    var sourceSheetOpen by remember { mutableStateOf(false) }
+    val sourceList by sources.providers.collectAsState()
+    val homeSource by sources.home.collectAsState()
+    val searchScope by sources.search.collectAsState()
 
     // A repository link opened from outside the app: go to the Extensions tab, which shows the dialog.
     val pendingRepo by AppEvents.pendingRepoUrl.collectAsState()
@@ -223,13 +240,16 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
     val sideMode = showBar && navPosition != AppPrefs.NAV_BOTTOM
 
     // Either shell hands the screens the same contract: system-bar insets,
-    // plus the pill's strip only when the floating bar is actually there.
+    // plus the pill's strip (and the source button above it) when it is there.
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val contentPadding = when {
         !showBar -> PaddingValues(0.dp)
         sideMode -> PaddingValues(top = topInset, bottom = navInset)
-        else -> PaddingValues(top = topInset, bottom = 84.dp + navInset)
+        else -> PaddingValues(
+            top = topInset,
+            bottom = 84.dp + navInset + if (sourceVisible) 60.dp else 0.dp,
+        )
     }
 
     // The app keeps its locale direction everywhere; the side bar is pinned
@@ -251,13 +271,21 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
                     .fillMaxSize()
                     .then(contentShift)
             ) {
-                AppNavGraph(navController, themeViewModel, contentPadding)
+                AppNavGraph(
+                    navController = navController,
+                    themeViewModel = themeViewModel,
+                    contentPadding = contentPadding,
+                    sources = sources,
+                    onOpenSources = { sourceSheetOpen = true },
+                )
             }
 
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 FloatingSideBar(
                     selectedRoute = route,
                     onSelect = { navController.navigateTopLevel(it) },
+                    sourceVisible = sourceVisible,
+                    onOpenSources = { sourceSheetOpen = true },
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .statusBarsPadding()
@@ -269,7 +297,13 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
         }
     } else {
         Box(Modifier.fillMaxSize()) {
-            AppNavGraph(navController, themeViewModel, contentPadding)
+            AppNavGraph(
+                navController = navController,
+                themeViewModel = themeViewModel,
+                contentPadding = contentPadding,
+                sources = sources,
+                onOpenSources = { sourceSheetOpen = true },
+            )
             AnimatedVisibility(
                 visible = showBar,
                 enter = fadeIn(tween(220)) +
@@ -278,9 +312,51 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
                     slideOutVertically(animationSpec = softSpring()) { it * 2 },
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                FloatingNavPill(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
+                Column(
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 20.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    // A separate button above the pill: attaching it to the
+                    // toolbar would squeeze the six tabs on narrow screens.
+                    AnimatedVisibility(
+                        visible = sourceVisible,
+                        enter = scaleIn(tween(220)) + fadeIn(tween(220)),
+                        exit = scaleOut(tween(180)) + fadeOut(tween(180)),
+                    ) {
+                        SmallFloatingActionButton(
+                            onClick = { sourceSheetOpen = true },
+                            modifier = Modifier.padding(end = 16.dp, bottom = 12.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Dns,
+                                contentDescription = stringResource(R.string.cd_choose_source),
+                            )
+                        }
+                    }
+                    FloatingNavPill(selectedRoute = route, onSelect = { navController.navigateTopLevel(it) })
+                }
             }
         }
+    }
+
+    if (sourceSheetOpen) {
+        val search = route == Routes.SEARCH
+        SourceSheet(
+            providers = sourceList,
+            selected = if (search) searchScope else homeSource,
+            showAllSources = search,
+            onSelect = { name ->
+                sourceSheetOpen = false
+                if (search) sources.selectSearch(name) else if (name != null) sources.selectHome(name)
+            },
+            onOpenExtensions = {
+                sourceSheetOpen = false
+                navController.navigateTopLevel(Routes.EXTENSIONS)
+            },
+            onDismiss = { sourceSheetOpen = false },
+        )
     }
 }
 
@@ -290,6 +366,8 @@ private fun AppNavGraph(
     navController: NavHostController,
     themeViewModel: ThemeViewModel,
     contentPadding: PaddingValues,
+    sources: SourceViewModel,
+    onOpenSources: () -> Unit,
 ) {
     val context = LocalContext.current
     fun openPlayer(playerArgs: PlayerArgs) {
@@ -306,12 +384,15 @@ private fun AppNavGraph(
                 contentPadding = contentPadding,
                 onOpenItem = navController::openDetails,
                 onOpenExtensions = { navController.navigateTopLevel(Routes.EXTENSIONS) },
+                onOpenSources = onOpenSources,
+                sourceViewModel = sources,
             )
         }
         composable(Routes.SEARCH) {
             SearchScreen(
                 contentPadding = contentPadding,
                 onOpenItem = navController::openDetails,
+                sourceViewModel = sources,
             )
         }
         composable(Routes.LIBRARY) {
@@ -369,6 +450,8 @@ private fun AppNavGraph(
 private fun FloatingSideBar(
     selectedRoute: String?,
     onSelect: (String) -> Unit,
+    sourceVisible: Boolean,
+    onOpenSources: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -391,6 +474,30 @@ private fun FloatingSideBar(
                     selected = selectedRoute == destination.route,
                     onClick = { onSelect(destination.route) },
                 )
+            }
+            AnimatedVisibility(
+                visible = sourceVisible,
+                enter = scaleIn(tween(220)) + fadeIn(tween(220)),
+                exit = scaleOut(tween(180)) + fadeOut(tween(180)),
+            ) {
+                Surface(
+                    onClick = onOpenSources,
+                    shape = RoundedCornerShape(50),
+                    color = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Box(
+                        modifier = Modifier.height(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Dns,
+                            contentDescription = stringResource(R.string.cd_choose_source),
+                            modifier = Modifier.size(NavIconSize),
+                        )
+                    }
+                }
             }
         }
     }
@@ -474,9 +581,6 @@ private fun SideNavItem(
 private fun FloatingNavPill(selectedRoute: String?, onSelect: (String) -> Unit) {
     HorizontalFloatingToolbar(
         expanded = true,
-        modifier = Modifier
-            .navigationBarsPadding()
-            .padding(bottom = 20.dp),
         content = {
             topLevelDestinations.forEach { destination ->
                 val selected = selectedRoute == destination.route

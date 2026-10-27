@@ -3,14 +3,17 @@ package com.kodastream.app.ui.home
 import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,21 +21,23 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -51,6 +56,7 @@ import com.kodastream.app.ui.components.SectionHeader
 import com.kodastream.app.ui.components.SkeletonBox
 import com.kodastream.app.ui.components.SkeletonPulseProvider
 import com.kodastream.app.ui.components.staggeredEnter
+import com.kodastream.app.ui.sources.SourceViewModel
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.plugins.PluginManager
@@ -138,6 +144,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun select(name: String) {
         if (name == _selected.value) return
         val api = Engine.provider(name) ?: return
+        // The sheet lists every installed provider; only those with a home page can fill this screen.
+        if (!api.hasMainPage) return
         _selected.value = name
         AppPrefs.setSelectedProvider(getApplication(), name)
         load(api)
@@ -197,6 +205,8 @@ fun HomeScreen(
     contentPadding: PaddingValues,
     onOpenItem: (SearchResponse) -> Unit,
     onOpenExtensions: () -> Unit,
+    onOpenSources: () -> Unit,
+    sourceViewModel: SourceViewModel,
     viewModel: HomeViewModel = viewModel(),
 ) {
     val providers by viewModel.providers.collectAsState()
@@ -206,6 +216,18 @@ fun HomeScreen(
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
     val startupDone by PluginManager.startupDone.collectAsState()
+    val sourceName by sourceViewModel.home.collectAsState()
+
+    // A choice in the source sheet arrives here; the provider's own fallback
+    // picks the first usable provider when the saved one is gone.
+    LaunchedEffect(sourceName) {
+        val name = sourceName ?: return@LaunchedEffect
+        viewModel.select(name)
+        sourceViewModel.reportHome(viewModel.selected.value)
+    }
+    LaunchedEffect(selected) {
+        sourceViewModel.reportHome(selected)
+    }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -224,14 +246,13 @@ fun HomeScreen(
                 onRefresh = viewModel::retry,
             ) {
                 HomeShelves(
-                    providers = providers,
-                    selected = selected,
+                    selectedSource = selected,
                     rows = rows,
                     hero = hero,
                     loading = loading,
                     error = error,
                     contentPadding = contentPadding,
-                    onSelectProvider = viewModel::select,
+                    onOpenSources = onOpenSources,
                     onOpenItem = onOpenItem,
                     onRetry = viewModel::retry,
                 )
@@ -246,17 +267,17 @@ fun HomeScreen(
  */
 @Composable
 private fun HomeShelves(
-    providers: List<MainAPI>,
-    selected: String?,
+    selectedSource: String?,
     rows: List<HomeRow>,
     hero: List<SearchResponse>,
     loading: Boolean,
     error: String?,
     contentPadding: PaddingValues,
-    onSelectProvider: (String) -> Unit,
+    onOpenSources: () -> Unit,
     onOpenItem: (SearchResponse) -> Unit,
     onRetry: () -> Unit,
 ) {
+    val chooseSourceLabel = stringResource(R.string.cd_choose_source)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -266,28 +287,34 @@ private fun HomeShelves(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item(key = "title") {
-            Text(
-                text = stringResource(R.string.home_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier
-                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp)
-                    .semantics { heading() },
-            )
-        }
-
-        item(key = "providers") {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
             ) {
-                items(providers, key = { it.name }) { api ->
-                    FilterChip(
-                        selected = api.name == selected,
-                        onClick = { onSelectProvider(api.name) },
-                        label = { Text(api.name) },
-                    )
+                Text(
+                    text = stringResource(R.string.home_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.semantics { heading() },
+                )
+                // With the chip row gone, this line names the provider and opens the sheet.
+                if (selectedSource != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable(onClickLabel = chooseSourceLabel, onClick = onOpenSources),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = selectedSource,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }

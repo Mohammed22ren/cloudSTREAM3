@@ -27,6 +27,7 @@ object AppPrefs {
     private const val KEY_UPDATE_CHECK = "update_last_check"
     private const val KEY_UPDATE_SKIPPED = "update_skipped_version"
     private const val POSITION_PREFIX = "pos_"
+    private const val DURATION_PREFIX = "dur_"
 
     const val NAV_SIDE = "side"
     const val NAV_BOTTOM = "bottom"
@@ -125,6 +126,14 @@ object AppPrefs {
 
     fun setPosition(context: Context, key: String, positionMs: Long) {
         prefs(context).edit { putLong(POSITION_PREFIX + key.hashCode(), positionMs) }
+    }
+
+    /** The last known length of one episode, in milliseconds. 0 when unknown. */
+    fun duration(context: Context, key: String): Long =
+        prefs(context).getLong(DURATION_PREFIX + key.hashCode(), 0L)
+
+    fun setDuration(context: Context, key: String, durationMs: Long) {
+        prefs(context).edit { putLong(DURATION_PREFIX + key.hashCode(), durationMs) }
     }
 
     // ---- First-run setup ----
