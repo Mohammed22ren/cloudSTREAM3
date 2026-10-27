@@ -1,6 +1,7 @@
 package com.kodastream.app.ui.theme
 
 import android.app.Activity
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.animation.core.Animatable
@@ -21,6 +22,7 @@ import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -204,6 +207,9 @@ fun KodaStreamTheme(
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
+            // The window is what shows for a frame after a recreation and
+            // behind translucent system UI. It must match the in-app mode.
+            window.setBackgroundDrawable(ColorDrawable(colorScheme.background.toArgb()))
             // enableEdgeToEdge leaves contrast enforcement on for the
             // navigation bar, which paints a translucent system scrim behind
             // it on three-button navigation - a visible band under the
@@ -237,6 +243,30 @@ fun KodaStreamTheme(
             androidx.compose.material3.LocalContentColor provides colorScheme.onBackground,
         ) {
             ScaledDensity(uiScale, content)
+        }
+    }
+}
+
+/**
+ * Keeps the status-bar icons readable while full-bleed artwork is under the
+ * bar: always the light style there, then the theme's own appearance again.
+ */
+@Composable
+fun ArtworkStatusBarIcons(overArtwork: Boolean) {
+    val view = LocalView.current
+    val appIsDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    DisposableEffect(view, overArtwork, appIsDark) {
+        if (!view.isInEditMode) {
+            val window = (view.context as Activity).window
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                !overArtwork && !appIsDark
+        }
+        onDispose {
+            if (!view.isInEditMode) {
+                val window = (view.context as Activity).window
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                    !appIsDark
+            }
         }
     }
 }

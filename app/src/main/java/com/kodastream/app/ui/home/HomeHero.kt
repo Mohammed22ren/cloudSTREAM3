@@ -122,9 +122,12 @@ private fun CarouselItemScope.HeroCard(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
+                    // The text block reaches well above the bottom edge, so
+                    // the scrim has to be opaque where it starts.
                     Brush.verticalGradient(
-                        0.45f to Color.Transparent,
-                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.88f),
+                        0.35f to Color.Transparent,
+                        0.62f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+                        1f to MaterialTheme.colorScheme.scrim.copy(alpha = 0.95f),
                     )
                 )
         )

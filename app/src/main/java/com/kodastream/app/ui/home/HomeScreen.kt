@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -28,11 +29,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -57,6 +60,7 @@ import com.kodastream.app.ui.components.SkeletonBox
 import com.kodastream.app.ui.components.SkeletonPulseProvider
 import com.kodastream.app.ui.components.staggeredEnter
 import com.kodastream.app.ui.sources.SourceViewModel
+import com.kodastream.app.ui.theme.ArtworkStatusBarIcons
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.plugins.PluginManager
@@ -278,7 +282,18 @@ private fun HomeShelves(
     onRetry: () -> Unit,
 ) {
     val chooseSourceLabel = stringResource(R.string.cd_choose_source)
+    val listState = rememberLazyListState()
+    val topInset = with(LocalDensity.current) { contentPadding.calculateTopPadding().roundToPx() }
+    val heroUnderBar by remember(listState, topInset) {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.key == "hero" }
+                ?.let { it.offset < topInset } == true
+        }
+    }
+    ArtworkStatusBarIcons(overArtwork = heroUnderBar)
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = contentPadding.calculateTopPadding(),

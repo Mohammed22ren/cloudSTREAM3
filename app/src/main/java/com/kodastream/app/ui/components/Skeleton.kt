@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -74,7 +75,14 @@ fun SkeletonBox(
     shape: Shape? = MaterialTheme.shapes.medium,
 ) {
     val pulse = LocalSkeletonPulse.current
-    val color = MaterialTheme.colorScheme.surfaceContainerHighest
+    // surfaceContainerHighest is close to the tinted light page at these
+    // alphas; the outline tone keeps the placeholder visible there. Dark is
+    // unchanged.
+    val color = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
     Box(
         modifier = modifier
             .then(if (shape != null) Modifier.clip(shape) else Modifier)

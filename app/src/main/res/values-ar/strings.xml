@@ -95,14 +95,19 @@
     <string name="nothing_to_update">كل شيء محدّث</string>
 
     <!-- الإعدادات -->
+    <string name="settings_appearance">المظهر</string>
     <string name="settings_theme">المظهر</string>
     <string name="theme_system">النظام</string>
     <string name="theme_light">فاتح</string>
     <string name="theme_dark">داكن</string>
     <string name="settings_amoled">أسود خالص</string>
     <string name="settings_amoled_summary">خلفيات سوداء تماماً في المظهر الداكن.</string>
+    <string name="settings_version">الإصدار %1$s</string>
+    <string name="settings_privacy_history">الخصوصية والسجل</string>
     <string name="settings_colors">الألوان</string>
     <string name="palette_wallpaper">ألوان الخلفية</string>
+    <string name="settings_wallpaper_colors">استخدام ألوان الخلفية</string>
+    <string name="settings_wallpaper_colors_summary">خذ الألوان من خلفية جهازك (أندرويد 12 وما بعده).</string>
     <string name="settings_palette_style">نمط الألوان</string>
     <string name="palette_style_tonal_spot">نغمة هادئة</string>
     <string name="palette_style_vibrant">نابض</string>
@@ -112,8 +117,10 @@
     <string name="settings_auto_update">تحديث الإضافات عند التشغيل</string>
     <string name="settings_auto_update_summary">يفحص مستودعاتك في كل مرة يبدأ فيها التطبيق.</string>
     <string name="settings_about">حول التطبيق</string>
-    <string name="settings_github">GitHub: github.com/mo7AmMeD64/cloudSTREAM3</string>
-    <string name="settings_donate">تبرع: creators.sa/x3onq</string>
+    <string name="settings_github_title">GitHub</string>
+    <string name="settings_github_summary">github.com/mo7AmMeD64/cloudSTREAM3</string>
+    <string name="settings_donate_title">تبرع</string>
+    <string name="settings_donate_summary">creators.sa/x3onq</string>
     <string name="about_text">الشكل مأخوذ من واجهة كودا، ومحرك الإضافات مأخوذ من كلاودستريم وهو مرخّص بموجب GNU GPL v3، لذلك هذا التطبيق مفتوح المصدر بالترخيص نفسه.</string>
     <string name="about_disclaimer">لا يحتوي هذا التطبيق على أي محتوى ولا أي مزوّد. هو يحمّل فقط الإضافات التي تختار تثبيتها، وأنت المسؤول عمّا تشاهده.</string>
     <string name="cd_clear_search">مسح البحث</string>
@@ -127,7 +134,7 @@
     <string name="cd_add_favorites">حفظ في المفضلة</string>
     <string name="cd_add_watchlist">حفظ في قائمة المشاهدة</string>
     <string name="settings_navigation">موضع شريط التنقل</string>
-    <string name="nav_position_side">الجانب (يسار)</string>
+    <string name="nav_position_side">الجانب</string>
     <string name="nav_position_bottom">الأسفل</string>
     <string name="search_scope_all">كل المصادر</string>
     <string name="cd_resize">وضع التحجيم</string>
@@ -179,6 +186,7 @@
     <string name="download_location">موقع التنزيل</string>
     <string name="download_location_change">تغيير</string>
     <string name="download_location_reset">استعادة الافتراضي</string>
+    <string name="download_location_reset_summary">العودة إلى مجلد التطبيق الخاص.</string>
     <string name="download_folder_invalid">لا يمكن الكتابة في هذا المجلد</string>
     <string name="download_wifi_only">التنزيل عبر الواي فاي فقط</string>
     <string name="download_wifi_summary">عند التشغيل، تنتظر التنزيلات اتصال الواي فاي.</string>

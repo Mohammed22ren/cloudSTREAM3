@@ -1,8 +1,11 @@
 package com.kodastream.app
 
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -43,8 +46,18 @@ import com.lagradost.cloudstream3.CommonActivity
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The window theme and AppCompat dialogs follow the in-app mode, not
+        // the system one. Must happen before super.onCreate.
+        ThemeViewModel.applyNightMode(this)
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        val barStyle = if (night) {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
         CommonActivity.setActivityInstance(this)
         installImageLoader()
         AppBootstrap.start(this)

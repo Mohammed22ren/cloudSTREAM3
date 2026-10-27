@@ -152,6 +152,7 @@ import com.kodastream.app.ui.components.RemoteImage
 import com.kodastream.app.ui.components.SkeletonBox
 import com.kodastream.app.ui.components.SkeletonPulseProvider
 import com.kodastream.app.ui.components.bouncySpring
+import com.kodastream.app.ui.theme.ArtworkStatusBarIcons
 import com.lagradost.cloudstream3.ActorData
 import com.lagradost.cloudstream3.AnimeLoadResponse
 import com.lagradost.cloudstream3.DubStatus
@@ -942,6 +943,7 @@ private fun DetailsContent(
                             onBack = onBack,
                             onShare = share,
                         )
+                        ArtworkStatusBarIcons(overArtwork = startState.firstVisibleItemIndex == 0)
                     }
                     LazyColumn(
                         state = endState,
@@ -1026,6 +1028,7 @@ private fun DetailsContent(
                     onBack = onBack,
                     onShare = share,
                 )
+                ArtworkStatusBarIcons(overArtwork = !collapsed)
             }
         }
 
@@ -1093,10 +1096,13 @@ private fun DetailsHero(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
+                    // Reaching full background before the title block, so the
+                    // text never sits on a bright poster in Light.
                     Brush.verticalGradient(
                         0f to MaterialTheme.colorScheme.background.copy(alpha = 0.35f),
                         0.3f to Color.Transparent,
-                        0.62f to MaterialTheme.colorScheme.background.copy(alpha = 0.75f),
+                        0.55f to MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                        0.72f to MaterialTheme.colorScheme.background,
                         1f to MaterialTheme.colorScheme.background,
                     )
                 )

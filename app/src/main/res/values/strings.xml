@@ -98,14 +98,19 @@
     <string name="nothing_to_update">Everything is up to date</string>
 
     <!-- Settings -->
+    <string name="settings_appearance">Appearance</string>
     <string name="settings_theme">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="settings_amoled">Pure black</string>
     <string name="settings_amoled_summary">True black backgrounds in the dark theme.</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="settings_privacy_history">Privacy and history</string>
     <string name="settings_colors">Colors</string>
     <string name="palette_wallpaper">Wallpaper</string>
+    <string name="settings_wallpaper_colors">Use wallpaper colors</string>
+    <string name="settings_wallpaper_colors_summary">Take the colors from your wallpaper (Android 12 and later).</string>
     <string name="settings_palette_style">Color style</string>
     <string name="palette_style_tonal_spot">Tonal spot</string>
     <string name="palette_style_vibrant">Vibrant</string>
@@ -115,8 +120,10 @@
     <string name="settings_auto_update">Update extensions at startup</string>
     <string name="settings_auto_update_summary">Checks your repositories each time the app starts.</string>
     <string name="settings_about">About</string>
-    <string name="settings_github">GitHub: github.com/mo7AmMeD64/cloudSTREAM3</string>
-    <string name="settings_donate">Donate: creators.sa/x3onq</string>
+    <string name="settings_github_title">GitHub</string>
+    <string name="settings_github_summary">github.com/mo7AmMeD64/cloudSTREAM3</string>
+    <string name="settings_donate_title">Donate</string>
+    <string name="settings_donate_summary">creators.sa/x3onq</string>
     <string name="about_text">The look comes from the Koda interface. The extension engine comes from CloudStream and is licensed under the GNU GPL v3, so this app is open source under the same license.</string>
     <string name="about_disclaimer">This app contains no content and no providers. It only loads extensions that you choose to install. You are responsible for what you watch.</string>
     <string name="cd_clear_search">Clear search</string>
@@ -130,7 +137,7 @@
     <string name="cd_add_favorites">Save to favorites</string>
     <string name="cd_add_watchlist">Save to watchlist</string>
     <string name="settings_navigation">Navigation bar position</string>
-    <string name="nav_position_side">Side (left)</string>
+    <string name="nav_position_side">Side</string>
     <string name="nav_position_bottom">Bottom</string>
     <string name="search_scope_all">All sources</string>
     <string name="cd_resize">Resize mode</string>
@@ -182,6 +189,7 @@
     <string name="download_location">Download location</string>
     <string name="download_location_change">Change</string>
     <string name="download_location_reset">Reset to default</string>
+    <string name="download_location_reset_summary">Return to the app\'s own folder.</string>
     <string name="download_folder_invalid">This folder cannot be written to</string>
     <string name="download_wifi_only">Download over Wi-Fi only</string>
     <string name="download_wifi_summary">When on, downloads wait for Wi-Fi.</string>
