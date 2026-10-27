@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -98,7 +99,8 @@ fun SetupWizard(
                 Image(
                     painter = painterResource(R.drawable.ic_launcher_foreground),
                     contentDescription = null,
-                    modifier = Modifier.size(44.dp),
+                    // Foreground is the full 108dp adaptive layer; scale 1.5x shows the 72dp visible window
+                    modifier = Modifier.size(56.dp).scale(1.5f),
                 )
             }
             Spacer(Modifier.width(14.dp))
