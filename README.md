@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="assets/icon.png" width="140" alt="cloud3 icon" />
-</p>
 
 <p align="center">
   <img src="https://e.top4top.io/p_3952nbgom1.png" alt="screenshot" />
