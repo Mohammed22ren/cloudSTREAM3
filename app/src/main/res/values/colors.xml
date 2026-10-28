@@ -55,6 +55,8 @@
     <color name="black_overlay">#66000000</color>
     <color name="darkBarTransparent">#C0121212</color>
     <color name="skipOpTransparent">#4D121212</color>
+    <!-- Strong enough behind the 2x glyph on bright video, invisible edge on dark. -->
+    <color name="player_speedup_scrim">#CC121212</color>
     <color name="darkBar">#121212</color>
     <color name="videoProgress">#66B5B5B5</color> <!--66B5B5B5-->
     <!--<color name="videoCache">#663D50FA</color>--> <!--66B5B5B5-->

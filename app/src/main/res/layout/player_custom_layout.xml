@@ -1117,7 +1117,7 @@
         app:icon="@drawable/speedup"
         app:iconTint="@color/textColor"
         android:foreground="@null"
-        android:backgroundTint="@color/skipOpTransparent"
+        android:backgroundTint="@color/player_speedup_scrim"
         tools:visibility="visible" />
     <LinearLayout
         android:id="@+id/player_episodes_button_root"

@@ -232,6 +232,8 @@
     <string name="settings_playback">التشغيل</string>
     <string name="settings_keep_screen_on">إبقاء الشاشة قيد التشغيل</string>
     <string name="settings_keep_screen_on_summary">يمنع انطفاء الشاشة أثناء المشاهدة</string>
+    <string name="settings_hold_speedup">اضغط مطولًا للسرعة</string>
+    <string name="settings_hold_speedup_summary">اضغط مطولًا على الفيديو للتشغيل بسرعة 2x، واتركه للعودة.</string>
     <string name="downloads_episodes_count">%d حلقة</string>
     <string name="downloads_delete_title">حذف العنوان</string>
     <string name="downloads_delete_title_confirm">حذف هذا العنوان وكل حلقاته المنزّلة؟</string>

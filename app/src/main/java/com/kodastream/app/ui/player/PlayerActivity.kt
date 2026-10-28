@@ -114,6 +114,9 @@ class PlayerActivity : AppCompatActivity() {
         handler.removeCallbacks(progressTicker)
         handler.removeCallbacks(hideBars)
         recordProgress()
+        // A hold that never got its ACTION_UP (focus loss, rotation) must not
+        // stick at 2x; the gesture helper only restores on touch end.
+        restorePlaybackSpeed()
         super.onPause()
     }
 
@@ -122,6 +125,8 @@ class PlayerActivity : AppCompatActivity() {
         if (hasFocus) {
             applyCutoutMode()
             hideSystemBars()
+        } else {
+            restorePlaybackSpeed()
         }
     }
 
@@ -129,6 +134,7 @@ class PlayerActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         applyCutoutMode()
         hideSystemBars()
+        restorePlaybackSpeed()
     }
 
     override fun onDestroy() {
@@ -174,9 +180,17 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /** Puts back the user's speed after a hold was interrupted before ACTION_UP. */
+    private fun restorePlaybackSpeed() {
+        val fragment = supportFragmentManager
+            .findFragmentById(android.R.id.content) as? GeneratorPlayer ?: return
+        val player = fragment.player
+        val stored = DataStoreHelper.playBackSpeed
+        if (player.getPlaybackSpeed() != stored) player.setPlaybackSpeed(stored)
+    }
+
     /** Mirrors the fragment's position into Koda's history and per-episode prefs. */
-    private fun recordProgress() {
-        if (!::args.isInitialized) return
+    private fun recordProgress() {        if (!::args.isInitialized) return
         val fragment = supportFragmentManager
             .findFragmentById(android.R.id.content) as? GeneratorPlayer ?: return
         val episode = fragment.currentEpisode ?: return

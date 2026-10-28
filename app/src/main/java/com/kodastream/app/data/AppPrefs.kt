@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
 import androidx.core.os.LocaleListCompat
+import androidx.preference.PreferenceManager
+import com.kodastream.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +61,27 @@ object AppPrefs {
     fun setPlaybackSpeed(context: Context, value: Float) {
         prefs(context).edit { putFloat(KEY_SPEED, value) }
     }
+
+    /**
+     * Hold-to-speed-up lives in the port's default preferences, the file its
+     * gesture helper reads. [ensureHoldToSpeedUp] seeds the default once, so a
+     * later "off" choice is not overwritten.
+     */
+    fun holdToSpeedUp(context: Context): Boolean =
+        playerPrefs(context).getBoolean(context.getString(R.string.speedup_key), true)
+
+    fun setHoldToSpeedUp(context: Context, value: Boolean) {
+        playerPrefs(context).edit { putBoolean(context.getString(R.string.speedup_key), value) }
+    }
+
+    fun ensureHoldToSpeedUp(context: Context) {
+        val prefs = playerPrefs(context)
+        val key = context.getString(R.string.speedup_key)
+        if (!prefs.contains(key)) prefs.edit { putBoolean(key, true) }
+    }
+
+    private fun playerPrefs(context: Context) =
+        PreferenceManager.getDefaultSharedPreferences(context)
 
     /** True when nothing new should be written to the watch history. Existing entries stay. */
     fun pauseHistory(context: Context): Boolean = prefs(context).getBoolean(KEY_PAUSE_HISTORY, false)

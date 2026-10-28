@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
@@ -90,6 +91,7 @@ fun SettingsScreen(
     var navPosition by remember { mutableStateOf(AppPrefs.navPosition(context)) }
     var pauseHistory by remember { mutableStateOf(AppPrefs.pauseHistory(context)) }
     var keepScreenOn by remember { mutableStateOf(AppPrefs.keepScreenOn(context)) }
+    var holdToSpeedUp by remember { mutableStateOf(AppPrefs.holdToSpeedUp(context)) }
     var downloadWifiOnly by remember { mutableStateOf(AppPrefs.downloadWifiOnly(context)) }
     var downloadConcurrent by remember { mutableStateOf(AppPrefs.downloadMaxConcurrent(context)) }
     var downloadLocation by remember { mutableStateOf(DownloadLocations.readableLocation(context)) }
@@ -248,7 +250,7 @@ fun SettingsScreen(
                 SettingsGroup(stringResource(R.string.settings_playback)) {
                     SwitchRow(
                         index = 0,
-                        count = 1,
+                        count = 2,
                         icon = Icons.Rounded.Speed,
                         title = stringResource(R.string.settings_keep_screen_on),
                         supporting = stringResource(R.string.settings_keep_screen_on_summary),
@@ -256,6 +258,18 @@ fun SettingsScreen(
                         onCheckedChange = { value ->
                             AppPrefs.setKeepScreenOn(context, value)
                             keepScreenOn = value
+                        },
+                    )
+                    SwitchRow(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.FastForward,
+                        title = stringResource(R.string.settings_hold_speedup),
+                        supporting = stringResource(R.string.settings_hold_speedup_summary),
+                        checked = holdToSpeedUp,
+                        onCheckedChange = { value ->
+                            AppPrefs.setHoldToSpeedUp(context, value)
+                            holdToSpeedUp = value
                         },
                     )
                 }

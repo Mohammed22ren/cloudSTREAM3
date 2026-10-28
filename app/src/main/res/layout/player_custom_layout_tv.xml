@@ -1165,6 +1165,7 @@
         app:iconGravity="top"
         app:iconTint="@color/textColor"
         app:rippleColor="?attr/colorPrimary"
+        android:backgroundTint="@color/player_speedup_scrim"
         tools:visibility="visible" />
 
 

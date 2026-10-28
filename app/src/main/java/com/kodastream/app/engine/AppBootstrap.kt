@@ -23,6 +23,8 @@ object AppBootstrap {
     fun start(context: Context) {
         if (!started.compareAndSet(false, true)) return
         val appContext = context.applicationContext
+        // Before any player reads the key; a user turning it off later sticks.
+        AppPrefs.ensureHoldToSpeedUp(appContext)
         scope.launch {
             try {
                 PluginManager.loadAllInstalled(appContext)
