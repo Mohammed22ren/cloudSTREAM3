@@ -46,6 +46,11 @@
     <string name="search_no_results">لا توجد نتائج</string>
     <string name="search_no_results_hint">جرّب كتابة أخرى أو ثبّت مزوّدين إضافيين.</string>
     <string name="searching_in">البحث في: %1$s</string>
+    <string name="search_history_title">عمليات البحث الأخيرة</string>
+    <string name="search_history_clear">مسح الكل</string>
+    <string name="search_history_cleared">تم مسح سجل البحث</string>
+    <string name="cd_search_history_item">ابحث عن %1$s</string>
+    <string name="cd_search_history_delete">إزالة من سجل البحث</string>
 
     <!-- التفاصيل -->
     <string name="episodes">الحلقات</string>
@@ -173,7 +178,9 @@
     <string name="history_clear_confirm_title">مسح كل السجل؟</string>
     <string name="history_clear_confirm_text">سيتم حذف جميع العناصر ولا يمكن التراجع عن ذلك.</string>
     <string name="settings_pause_history">إيقاف حفظ السجل</string>
-    <string name="settings_pause_history_summary">عند التشغيل، لن يتم تسجيل ما تشاهده. العناصر المحفوظة تبقى كما هي.</string>
+    <string name="settings_pause_history_summary">عند التشغيل، لن يتم تسجيل ما تشاهده ولن تُحفظ عمليات البحث. العناصر المحفوظة تبقى كما هي.</string>
+    <string name="settings_clear_search_history">مسح سجل البحث</string>
+    <string name="settings_clear_search_history_summary">يحذف كل عمليات البحث المحفوظة.</string>
     <string name="cd_mark_watched">تعليم كمشاهد</string>
     <string name="cd_watched">تمت المشاهدة</string>
     <string name="mark_season_watched">تعليم الموسم كمشاهد</string>

@@ -49,6 +49,11 @@
     <string name="search_no_results">No results</string>
     <string name="search_no_results_hint">Try another spelling or install more providers.</string>
     <string name="searching_in">Searching: %1$s</string>
+    <string name="search_history_title">Recent searches</string>
+    <string name="search_history_clear">Clear all</string>
+    <string name="search_history_cleared">Search history cleared</string>
+    <string name="cd_search_history_item">Search for %1$s</string>
+    <string name="cd_search_history_delete">Remove from search history</string>
 
     <!-- Details -->
     <string name="episodes">Episodes</string>
@@ -176,7 +181,9 @@
     <string name="history_clear_confirm_title">Clear all history?</string>
     <string name="history_clear_confirm_text">Every entry will be deleted. This cannot be undone.</string>
     <string name="settings_pause_history">Pause watch history</string>
-    <string name="settings_pause_history_summary">When on, nothing you watch is recorded. Existing entries stay.</string>
+    <string name="settings_pause_history_summary">When on, nothing you watch is recorded and searches are not saved. Existing entries stay.</string>
+    <string name="settings_clear_search_history">Clear search history</string>
+    <string name="settings_clear_search_history_summary">Removes every saved search.</string>
     <string name="cd_mark_watched">Mark as watched</string>
     <string name="cd_watched">Watched</string>
     <string name="mark_season_watched">Mark season as watched</string>

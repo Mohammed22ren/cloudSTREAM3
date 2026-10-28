@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Tune
@@ -66,6 +67,7 @@ import com.kodastream.app.BuildConfig
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.data.DownloadLocations
+import com.kodastream.app.data.SearchHistoryStore
 import com.kodastream.app.ui.theme.APP_PALETTES
 import com.kodastream.app.ui.theme.DYNAMIC_PALETTE_ID
 import com.kodastream.app.ui.theme.PALETTE_CATEGORIES
@@ -316,7 +318,7 @@ fun SettingsScreen(
                 SettingsGroup(stringResource(R.string.settings_privacy_history)) {
                     SwitchRow(
                         index = 0,
-                        count = 1,
+                        count = 2,
                         icon = Icons.Rounded.History,
                         title = stringResource(R.string.settings_pause_history),
                         supporting = stringResource(R.string.settings_pause_history_summary),
@@ -324,6 +326,21 @@ fun SettingsScreen(
                         onCheckedChange = { value ->
                             AppPrefs.setPauseHistory(context, value)
                             pauseHistory = value
+                        },
+                    )
+                    NavigationRow(
+                        index = 1,
+                        count = 2,
+                        icon = Icons.Rounded.Search,
+                        title = stringResource(R.string.settings_clear_search_history),
+                        supporting = stringResource(R.string.settings_clear_search_history_summary),
+                        onClick = {
+                            SearchHistoryStore.clear(context)
+                            Toast.makeText(
+                                context,
+                                R.string.search_history_cleared,
+                                Toast.LENGTH_SHORT,
+                            ).show()
                         },
                     )
                 }

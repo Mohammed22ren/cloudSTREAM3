@@ -1,13 +1,18 @@
 package com.kodastream.app.ui.search
 
+import android.app.Application
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -15,12 +20,14 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -36,11 +43,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kodastream.app.R
+import com.kodastream.app.data.AppPrefs
+import com.kodastream.app.data.SearchHistoryStore
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.ui.components.EmptyBox
 import com.kodastream.app.ui.components.PosterCard
@@ -58,7 +68,7 @@ import kotlinx.coroutines.sync.withPermit
 
 data class SearchGroup(val apiName: String, val items: List<SearchResponse>)
 
-class SearchViewModel : ViewModel() {
+class SearchViewModel(application: Application) : AndroidViewModel(application) {
     private val _groups = MutableStateFlow<List<SearchGroup>>(emptyList())
     val groups: StateFlow<List<SearchGroup>> = _groups.asStateFlow()
 
@@ -69,12 +79,24 @@ class SearchViewModel : ViewModel() {
     private val _searched = MutableStateFlow(false)
     val searched: StateFlow<Boolean> = _searched.asStateFlow()
 
+    /** Null until the stored list loads. */
+    val history: StateFlow<List<String>?> = SearchHistoryStore.entries
+
     private var job: Job? = null
+
+    init {
+        SearchHistoryStore.current(getApplication())
+    }
 
     /** [scope] narrows the search to one provider by name; null searches every provider. */
     fun submit(query: String, scope: String? = null) {
         val text = query.trim()
         if (text.isEmpty()) return
+        // Search history is not watch history, but the same pause switch stops
+        // both from being recorded. Existing entries stay.
+        if (!AppPrefs.pauseHistory(getApplication())) {
+            SearchHistoryStore.add(getApplication(), text)
+        }
         job?.cancel()
         job = viewModelScope.launch {
             _searching.value = true
@@ -104,6 +126,14 @@ class SearchViewModel : ViewModel() {
         }
     }
 
+    fun removeHistory(entry: String) {
+        SearchHistoryStore.remove(getApplication(), entry)
+    }
+
+    fun clearHistory() {
+        SearchHistoryStore.clear(getApplication())
+    }
+
     fun clear() {
         job?.cancel()
         _groups.value = emptyList()
@@ -122,6 +152,7 @@ fun SearchScreen(
     val groups by viewModel.groups.collectAsState()
     val searching by viewModel.searching.collectAsState()
     val searched by viewModel.searched.collectAsState()
+    val history by viewModel.history.collectAsState()
     val scope by sourceViewModel.search.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     // The scope lives in the shared holder so the source sheet can change it.
@@ -187,6 +218,19 @@ fun SearchScreen(
                     hint = stringResource(R.string.search_no_results_hint),
                 )
 
+                !searched && !history.isNullOrEmpty() -> SearchHistory(
+                    entries = history.orEmpty().filter { entry ->
+                        query.isBlank() || entry.contains(query.trim(), ignoreCase = true)
+                    },
+                    contentPadding = contentPadding,
+                    onPick = { entry ->
+                        query = entry
+                        viewModel.submit(entry, scope)
+                    },
+                    onRemove = viewModel::removeHistory,
+                    onClearAll = viewModel::clearHistory,
+                )
+
                 groups.isEmpty() -> EmptyBox(
                     title = stringResource(R.string.search_idle_title),
                     hint = stringResource(R.string.search_idle_hint),
@@ -219,6 +263,82 @@ fun SearchScreen(
                                 LoadingIndicator(Modifier.size(32.dp))
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Recent searches: a suggestion list while nothing has been searched yet. */
+@Composable
+private fun SearchHistory(
+    entries: List<String>,
+    contentPadding: PaddingValues,
+    onPick: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onClearAll: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(
+            modifier = Modifier
+                .widthIn(max = 600.dp)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(
+                bottom = contentPadding.calculateBottomPadding() + 16.dp,
+            ),
+        ) {
+            item(key = "history-header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.search_history_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onClearAll) {
+                        Text(stringResource(R.string.search_history_clear))
+                    }
+                }
+            }
+            items(entries, key = { it }) { entry ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable(
+                            onClickLabel = stringResource(R.string.cd_search_history_item, entry),
+                            onClick = { onPick(entry) },
+                        )
+                        .padding(start = 16.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.History,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = entry,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp),
+                    )
+                    IconButton(onClick = { onRemove(entry) }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.cd_search_history_delete),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
