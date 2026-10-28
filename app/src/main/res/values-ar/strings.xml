@@ -33,6 +33,8 @@
     <string name="play">تشغيل</string>
     <string name="coming_soon">قريباً</string>
     <string name="nothing_found">لا يوجد شيء</string>
+    <string name="view_more">عرض المزيد</string>
+    <string name="no_more_items">لا مزيد من العناصر</string>
     <string name="open_extensions">فتح الإضافات</string>
 
     <!-- الرئيسية -->

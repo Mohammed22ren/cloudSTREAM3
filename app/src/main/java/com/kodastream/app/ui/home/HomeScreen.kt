@@ -81,6 +81,11 @@ data class HomeRow(
     val title: String,
     val items: List<SearchResponse>,
     val horizontal: Boolean,
+    /** Index in `api.mainPage`, so an expanded page can request the same section. */
+    val pageIndex: Int,
+    /** The last page loaded into [items]. */
+    val page: Int,
+    val hasNext: Boolean,
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -167,8 +172,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     launch {
                         gate.withPermit {
                             val result = Engine.mainPage(api, page)
-                            result.onSuccess { lists ->
-                                results[index] = lists
+                            result.onSuccess { response ->
+                                results[index] = response.lists
                                     .filter { it.list.isNotEmpty() }
                                     .mapIndexed { i, list ->
                                         HomeRow(
@@ -176,6 +181,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                                             title = list.name.ifBlank { page.name },
                                             items = list.list,
                                             horizontal = list.isHorizontalImages,
+                                            pageIndex = index,
+                                            page = 1,
+                                            hasNext = response.hasNext,
                                         )
                                     }
                                 _rows.value = results.filterNotNull().flatten()
@@ -201,6 +209,8 @@ fun HomeScreen(
     onOpenExtensions: () -> Unit,
     onOpenSources: () -> Unit,
     sourceViewModel: SourceViewModel,
+    expandedViewModel: ExpandedHomeViewModel,
+    onOpenSection: () -> Unit,
     viewModel: HomeViewModel = viewModel(),
 ) {
     val providers by viewModel.providers.collectAsState()
@@ -209,11 +219,14 @@ fun HomeScreen(
     val hero by viewModel.hero.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val sections by expandedViewModel.sections.collectAsState()
     val startupDone by PluginManager.startupDone.collectAsState()
     val sourceName by sourceViewModel.home.collectAsState()
 
     // One direction: the source owner resolves the name, Home only loads it.
     LaunchedEffect(sourceName) { viewModel.setSource(sourceName) }
+    // A different provider invalidates every paged section and its page indexes.
+    LaunchedEffect(selected) { expandedViewModel.setProvider(selected) }
 
     Box(Modifier.fillMaxSize()) {
         when {
@@ -233,7 +246,11 @@ fun HomeScreen(
 
             else -> ExpressivePullToRefresh(
                 isRefreshing = loading,
-                onRefresh = viewModel::retry,
+                onRefresh = {
+                    // Fresh source lists make every paged copy stale.
+                    expandedViewModel.reset()
+                    viewModel.retry()
+                },
             ) {
                 HomeShelves(
                     selectedSource = selected,
@@ -241,10 +258,18 @@ fun HomeScreen(
                     hero = hero,
                     loading = loading,
                     error = error,
+                    sections = sections,
                     contentPadding = contentPadding,
                     onOpenSources = onOpenSources,
                     onOpenItem = onOpenItem,
                     onRetry = viewModel::retry,
+                    onViewMore = { row ->
+                        val provider = selected
+                        if (provider != null) {
+                            expandedViewModel.open(provider, row)
+                            onOpenSection()
+                        }
+                    },
                 )
             }
         }
@@ -262,10 +287,12 @@ private fun HomeShelves(
     hero: List<SearchResponse>,
     loading: Boolean,
     error: String?,
+    sections: Map<String, ExpandedSection>,
     contentPadding: PaddingValues,
     onOpenSources: () -> Unit,
     onOpenItem: (SearchResponse) -> Unit,
     onRetry: () -> Unit,
+    onViewMore: (HomeRow) -> Unit,
 ) {
     val chooseSourceLabel = stringResource(R.string.cd_choose_source)
     val listState = rememberLazyListState()
@@ -368,6 +395,11 @@ private fun HomeShelves(
             key = { _, row -> row.key },
             contentType = { _, _ -> "shelf" },
         ) { index, row ->
+            // The expanded screen turns hasNext off when a page ends or fails,
+            // and that hides the button here without reloading Home.
+            val canViewMore = row.hasNext &&
+                sections[sectionKey(selectedSource.orEmpty(), row.key)]?.hasNext != false
+            val viewMore: (() -> Unit)? = if (canViewMore) ({ onViewMore(row) }) else null
             // The first three shelves rise in once; later ones just appear, and
             // a provider switch reuses the already-settled rows.
             if (index < 3) {
@@ -376,10 +408,10 @@ private fun HomeShelves(
                     visibleState = entrance,
                     enter = staggeredEnter(index),
                 ) {
-                    Shelf(row = row, onOpenItem = onOpenItem)
+                    Shelf(row = row, onOpenItem = onOpenItem, onViewMore = viewMore)
                 }
             } else {
-                Shelf(row = row, onOpenItem = onOpenItem)
+                Shelf(row = row, onOpenItem = onOpenItem, onViewMore = viewMore)
             }
         }
 
@@ -397,9 +429,10 @@ private fun HomeShelves(
 private fun Shelf(
     row: HomeRow,
     onOpenItem: (SearchResponse) -> Unit,
+    onViewMore: (() -> Unit)?,
 ) {
     Column {
-        SectionHeader(row.title)
+        SectionHeader(row.title, onViewMore = onViewMore)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),

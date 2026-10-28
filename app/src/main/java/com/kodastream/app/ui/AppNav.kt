@@ -100,7 +100,9 @@ import com.kodastream.app.ui.details.DetailsScreen
 import com.kodastream.app.ui.details.DetailsViewModel
 import com.kodastream.app.ui.extensions.ExtensionsScreen
 import com.kodastream.app.ui.history.HistoryScreen
+import com.kodastream.app.ui.home.ExpandedHomeViewModel
 import com.kodastream.app.ui.home.HomeScreen
+import com.kodastream.app.ui.home.SectionScreen
 import com.kodastream.app.ui.library.LibraryScreen
 import com.kodastream.app.ui.player.PlayerActivity
 import com.kodastream.app.ui.search.SearchScreen
@@ -117,6 +119,7 @@ private object Routes {
     const val HISTORY = "history"
     const val EXTENSIONS = "extensions"
     const val SETTINGS = "settings"
+    const val SECTION = "section"
     const val DETAILS = "details/{id}"
 }
 
@@ -219,6 +222,8 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
     val showBar = topLevelDestinations.any { it.route == route }
     val sourceVisible = route == Routes.HOME || route == Routes.SEARCH
     val sources: SourceViewModel = viewModel()
+    // Activity-scoped: paged Home sections survive rotation and Back to Home.
+    val expanded: ExpandedHomeViewModel = viewModel()
 
     // The source sheet is hosted here so both routes and both shells share it.
     var sourceSheetOpen by remember { mutableStateOf(false) }
@@ -264,6 +269,7 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
                     themeViewModel = themeViewModel,
                     contentPadding = contentPadding,
                     sources = sources,
+                    expanded = expanded,
                     onOpenSources = { sourceSheetOpen = true },
                 )
             }
@@ -288,6 +294,7 @@ fun AppRoot(themeViewModel: ThemeViewModel) {
                 themeViewModel = themeViewModel,
                 contentPadding = contentPadding,
                 sources = sources,
+                expanded = expanded,
                 onOpenSources = { sourceSheetOpen = true },
             )
             AnimatedVisibility(
@@ -353,6 +360,7 @@ private fun AppNavGraph(
     themeViewModel: ThemeViewModel,
     contentPadding: PaddingValues,
     sources: SourceViewModel,
+    expanded: ExpandedHomeViewModel,
     onOpenSources: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -372,6 +380,8 @@ private fun AppNavGraph(
                 onOpenExtensions = { navController.navigateTopLevel(Routes.EXTENSIONS) },
                 onOpenSources = onOpenSources,
                 sourceViewModel = sources,
+                expandedViewModel = expanded,
+                onOpenSection = { navController.navigate(Routes.SECTION) },
             )
         }
         composable(Routes.SEARCH) {
@@ -400,6 +410,13 @@ private fun AppNavGraph(
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(contentPadding = contentPadding, themeViewModel = themeViewModel)
+        }
+        composable(Routes.SECTION) {
+            SectionScreen(
+                viewModel = expanded,
+                onBack = { navController.popBackStack() },
+                onOpenItem = navController::openDetails,
+            )
         }
         composable(
             route = Routes.DETAILS,

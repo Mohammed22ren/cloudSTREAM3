@@ -36,6 +36,8 @@
     <string name="play">Play</string>
     <string name="coming_soon">Coming soon</string>
     <string name="nothing_found">Nothing found</string>
+    <string name="view_more">View more</string>
+    <string name="no_more_items">No more items</string>
     <string name="open_extensions">Open Extensions</string>
 
     <!-- Home -->

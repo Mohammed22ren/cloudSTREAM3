@@ -26,6 +26,9 @@ import kotlinx.coroutines.withTimeout
 object Engine {
     private const val DEFAULT_TIMEOUT_MS = 60_000L
 
+    /** One home page: its lists and whether the provider has another page. */
+    data class MainPageResult(val lists: List<HomePageList>, val hasNext: Boolean)
+
     /** Every provider that loaded successfully, in registration order. */
     fun providers(): List<MainAPI> =
         APIHolder.allProviders.withLock { APIHolder.allProviders.toList() }
@@ -49,10 +52,11 @@ object Engine {
         }
     }
 
-    suspend fun mainPage(api: MainAPI, page: MainPageData, pageNumber: Int = 1): Result<List<HomePageList>> =
+    suspend fun mainPage(api: MainAPI, page: MainPageData, pageNumber: Int = 1): Result<MainPageResult> =
         guarded(api.getMainPageTimeoutMs) {
             val request = MainPageRequest(page.name, page.data, page.horizontalImages)
-            api.getMainPage(pageNumber, request)?.items ?: emptyList()
+            val response = api.getMainPage(pageNumber, request)
+            MainPageResult(response?.items.orEmpty(), response?.hasNext == true)
         }
 
     suspend fun search(api: MainAPI, query: String): Result<List<SearchResponse>> =
