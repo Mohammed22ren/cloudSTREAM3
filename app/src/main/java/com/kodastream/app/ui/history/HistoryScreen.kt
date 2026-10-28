@@ -55,7 +55,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kodastream.app.R
 import com.kodastream.app.data.DetailsArgs
@@ -65,6 +64,7 @@ import com.kodastream.app.data.PlayerArgs
 import com.kodastream.app.data.WatchedStore
 import com.kodastream.app.engine.Engine
 import com.kodastream.app.ui.components.EmptyBox
+import com.kodastream.app.ui.components.PosterTitle
 import com.kodastream.app.ui.components.RemoteImage
 import com.kodastream.app.ui.components.SectionHeader
 import com.kodastream.app.ui.components.bouncySpring
@@ -391,14 +391,7 @@ private fun HistoryCard(
                     )
                 }
             }
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            )
+            PosterTitle(text = entry.title)
         }
     }
 }
