@@ -23,6 +23,7 @@ object AppPrefs {
     private const val KEY_DL_MAX = "download_max_concurrent"
     private const val KEY_DL_SERVER = "download_last_server"
     private const val KEY_DL_FOLDERS_DONE = "download_folders_migrated"
+    private const val KEY_EXTERNAL_MANAGER = "external_download_manager"
     private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
     private const val KEY_SETUP_DONE = "setup_done"
     private const val KEY_APP_LANGUAGE = "app_language"
@@ -131,6 +132,14 @@ object AppPrefs {
 
     fun setLastDownloadServer(context: Context, value: String) {
         prefs(context).edit { putString(KEY_DL_SERVER, value) }
+    }
+
+    /** Package name of the external download manager used last, if any. */
+    fun externalDownloadManager(context: Context): String? =
+        prefs(context).getString(KEY_EXTERNAL_MANAGER, null)
+
+    fun setExternalDownloadManager(context: Context, packageName: String?) {
+        prefs(context).edit { putString(KEY_EXTERNAL_MANAGER, packageName) }
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

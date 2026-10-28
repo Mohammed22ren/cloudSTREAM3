@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,8 +18,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -38,6 +46,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.os.Build
+import android.widget.Toast
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.kodastream.app.R
 import com.kodastream.app.data.AppPrefs
 import com.kodastream.app.engine.Engine
@@ -46,6 +58,7 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import java.util.Locale
 
 /** What the card downloads: one episode or movie, or a whole season by preference. */
 sealed interface DownloadTarget {
@@ -81,9 +94,11 @@ private sealed interface SheetState {
  * an info line; several -> a list with "No subtitles", the app language
  * preselected.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DownloadOptionsSheet(
     apiName: String,
+    title: String,
     target: DownloadTarget,
     onConfirm: (link: ExtractorLink, subtitle: SubtitleFile?) -> Unit,
     onConfirmSeason: (serverName: String, subtitleLang: String?) -> Unit,
@@ -92,9 +107,47 @@ fun DownloadOptionsSheet(
     val context = LocalContext.current
     var state by remember { mutableStateOf<SheetState>(SheetState.Loading) }
     var retryTick by remember { mutableIntStateOf(0) }
+    var managerMenu by remember { mutableStateOf(false) }
 
     var selectedLink by remember { mutableStateOf<ExtractorLink?>(null) }
     var selectedSub by remember { mutableStateOf<SubtitleFile?>(null) }
+
+    val managers = remember {
+        orderDownloadManagers(
+            installed = installedDownloadManagers(context),
+            remembered = AppPrefs.externalDownloadManager(context),
+        )
+    }
+
+    fun launchExternal(manager: DownloadManager?) {
+        val link = selectedLink ?: return
+        val file = downloadFileName(
+            title = title,
+            episodeLabel = (target as? DownloadTarget.Single)?.let(::episodeLabel),
+            url = link.url,
+            isM3u8 = link.type == ExtractorLinkType.M3U8,
+        )
+        val started = if (manager == null) {
+            startDownloadChooser(context, link, file, title)
+        } else {
+            startDownloadWith(context, link, file, manager.packageName)
+        }
+        if (!started) {
+            Toast.makeText(context, R.string.download_no_app, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (manager != null) AppPrefs.setExternalDownloadManager(context, manager.packageName)
+        managerMenu = false
+        onDismiss()
+    }
+
+    fun copyText(text: String, toast: Int) {
+        if (!copyToClipboard(context, title, text)) return
+        // Android 13 shows its own clipboard confirmation.
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // The same server extraction the player runs. Season mode probes the
     // first episode; every episode is matched individually at confirm time.
@@ -273,6 +326,103 @@ fun DownloadOptionsSheet(
                         }
                     }
 
+                    val link = selectedLink
+                    if (target is DownloadTarget.Single && link != null) {
+                        val canUseLink = isHttpUrl(link.url)
+                        val headerLines = remember(link) {
+                            downloadHeaderLines(link.headers, link.referer)
+                        }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                        ) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                TextButton(
+                                    onClick = { copyText(link.url, R.string.copy_link_toast) },
+                                    enabled = canUseLink,
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.ContentCopy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(R.string.copy_link))
+                                }
+                                if (headerLines.isNotEmpty()) {
+                                    TextButton(
+                                        onClick = {
+                                            copyText(
+                                                headerLines.joinToString("\n"),
+                                                R.string.copy_headers_toast,
+                                            )
+                                        },
+                                        enabled = canUseLink,
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.ContentCopy,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.copy_headers))
+                                    }
+                                }
+                                Box {
+                                    FilledTonalButton(
+                                        onClick = {
+                                            if (managers.isEmpty()) launchExternal(null)
+                                            else managerMenu = true
+                                        },
+                                        enabled = canUseLink,
+                                    ) {
+                                        Icon(
+                                            Icons.AutoMirrored.Rounded.OpenInNew,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.download_with))
+                                    }
+                                    DropdownMenu(
+                                        expanded = managerMenu,
+                                        onDismissRequest = { managerMenu = false },
+                                    ) {
+                                        managers.forEach { manager ->
+                                            DropdownMenuItem(
+                                                text = { Text(manager.label) },
+                                                leadingIcon = { ManagerIcon(manager.packageName) },
+                                                onClick = { launchExternal(manager) },
+                                            )
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.download_with_other)) },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.AutoMirrored.Rounded.OpenInNew,
+                                                    contentDescription = null,
+                                                )
+                                            },
+                                            onClick = { launchExternal(null) },
+                                        )
+                                    }
+                                }
+                            }
+                            if (link.type == ExtractorLinkType.M3U8) {
+                                Text(
+                                    text = stringResource(R.string.download_hls_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                        }
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -338,4 +488,28 @@ private fun RadioRow(
             }
         }
     }
+}
+
+@Composable
+private fun ManagerIcon(packageName: String) {
+    val context = LocalContext.current
+    val icon = remember(packageName) {
+        runCatching { context.packageManager.getApplicationIcon(packageName) }.getOrNull()
+    }
+    if (icon == null) {
+        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+    } else {
+        AsyncImage(
+            model = ImageRequest.Builder(context).data(icon).build(),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+private fun episodeLabel(target: DownloadTarget.Single): String? {
+    target.episodeTitle?.takeIf { it.isNotBlank() }?.let { return it }
+    val season = target.season ?: return null
+    val episode = target.episode ?: return null
+    return String.format(Locale.ROOT, "S%02dE%02d", season, episode)
 }

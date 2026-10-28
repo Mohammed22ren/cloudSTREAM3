@@ -248,6 +248,14 @@
     <string name="download_load_failed">Could not load servers</string>
     <string name="download_no_subtitle">No subtitles</string>
     <string name="download_subtitle_line">Subtitle: %s</string>
+    <string name="copy_link">Copy link</string>
+    <string name="copy_link_toast">Link copied</string>
+    <string name="copy_headers">Copy headers</string>
+    <string name="copy_headers_toast">Headers copied</string>
+    <string name="download_with">Download with…</string>
+    <string name="download_with_other">Other apps…</string>
+    <string name="download_no_app">No app can download this link</string>
+    <string name="download_hls_hint">Some download managers cannot save HLS streams.</string>
     <string name="added_to_downloads">Added to downloads</string>
     <string name="view">View</string>
     <string name="dl_file_mp4">MP4</string>

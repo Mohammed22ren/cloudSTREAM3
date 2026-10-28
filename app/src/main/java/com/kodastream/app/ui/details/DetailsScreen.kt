@@ -1044,6 +1044,7 @@ private fun DetailsContent(
     downloadSheet?.let { sheetTarget ->
         DownloadOptionsSheet(
             apiName = response.apiName,
+            title = title,
             target = sheetTarget,
             onConfirm = { link, subtitle ->
                 if (sheetTarget is DownloadTarget.Single) {

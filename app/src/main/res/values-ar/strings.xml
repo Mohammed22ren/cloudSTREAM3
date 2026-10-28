@@ -245,6 +245,14 @@
     <string name="download_load_failed">تعذّر تحميل السيرفرات</string>
     <string name="download_no_subtitle">بدون ترجمة</string>
     <string name="download_subtitle_line">الترجمة: %s</string>
+    <string name="copy_link">نسخ الرابط</string>
+    <string name="copy_link_toast">تم نسخ الرابط</string>
+    <string name="copy_headers">نسخ الترويسات</string>
+    <string name="copy_headers_toast">تم نسخ الترويسات</string>
+    <string name="download_with">التنزيل بواسطة…</string>
+    <string name="download_with_other">تطبيقات أخرى…</string>
+    <string name="download_no_app">لا يوجد تطبيق يمكنه تنزيل هذا الرابط</string>
+    <string name="download_hls_hint">بعض مديري التنزيل لا يستطيعون حفظ بث HLS.</string>
     <string name="added_to_downloads">تمت الإضافة إلى التنزيلات</string>
     <string name="view">عرض</string>
     <string name="dl_file_mp4">MP4</string>
